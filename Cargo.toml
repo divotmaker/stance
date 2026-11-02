@@ -1,0 +1,65 @@
+[package]
+name = "stance"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/divotmaker/stance"
+description = "USB camera capture with a pre-roll buffer and trigger-cut MJPEG clips, for golf swing replay"
+readme = "README.md"
+keywords = ["camera", "uvc", "mjpeg", "golf", "replay"]
+categories = ["multimedia::video", "hardware-support"]
+
+[lib]
+name = "stance"
+
+[features]
+# Turns Flight Relay Protocol `shot_trigger` events into clip triggers
+# (`stance::frp`).
+frp = ["dep:flightrelay"]
+
+[dependencies]
+thiserror = "2"
+# Camera info, formats and the clip sidecar are serialisable.
+serde = { version = "1", features = ["derive"] }
+# `float_roundtrip`: sidecar frame rates (nominal and measured fps) parse back
+# to exactly the values written, so a read sidecar equals the written one.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+flightrelay = { version = "0.3.1", optional = true }
+
+# Encodes the test pattern's frames. Native targets only: wasm builds carry
+# no sources.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+jpeg-encoder = "0.7"
+
+# CLOCK_MONOTONIC, and the V4L2 ioctls on Linux.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Media Foundation capture and the QPC clock.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Media_DirectShow",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_Com",
+    "Win32_System_Performance",
+] }
+
+[dev-dependencies]
+# Decodes frames in tests.
+zune-jpeg = "0.5"
+# The WebSocket client in examples/frp_record.rs.
+flightrelay = { version = "0.3.1", features = ["transport"] }
+
+[[example]]
+name = "frp_record"
+required-features = ["frp"]
+
+[lints.rust]
+missing_docs = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Every `unsafe` block carries a `// SAFETY:` comment; this lint enforces it.
+undocumented_unsafe_blocks = "warn"
