@@ -25,7 +25,7 @@ serde = { version = "1", features = ["derive"] }
 # `float_roundtrip`: sidecar frame rates (nominal and measured fps) parse back
 # to exactly the values written, so a read sidecar equals the written one.
 serde_json = { version = "1", features = ["float_roundtrip"] }
-flightrelay = { version = "0.3.1", optional = true }
+flightrelay = { version = "0.4", optional = true }
 
 # Encodes the test pattern's frames. Native targets only: wasm builds carry
 # no sources.
@@ -50,7 +50,7 @@ windows = { version = "0.62", features = [
 # Decodes frames in tests.
 zune-jpeg = "0.5"
 # The WebSocket client in examples/frp_record.rs.
-flightrelay = { version = "0.3.1", features = ["transport"] }
+flightrelay = { version = "0.4", features = ["transport"] }
 
 [[example]]
 name = "frp_record"
