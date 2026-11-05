@@ -1,2 +1,2 @@
 # Product, API and format names written in prose, not code.
-doc-valid-idents = ["MJPEG", "WebSocket", "DirectShow", ".."]
+doc-valid-idents = ["MJPEG", "WebSocket", "DirectShow", "RTMPose", "OpenMMLab", "OpenCV", "SimCC", "IoU", ".."]

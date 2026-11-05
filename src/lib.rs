@@ -19,6 +19,12 @@
 //!   decoders.
 //! - With the `frp` feature, [`frp`] maps Flight Relay Protocol
 //!   `shot_trigger` events onto triggers.
+//! - With the `pose` feature (alpha), `pose` estimates body keypoints
+//!   (RTMPose, pure-Rust inference): live per frame, or over a recorded clip
+//!   on several threads. Models are downloaded separately and verified by
+//!   SHA-256; `pose-download` adds fetching them over HTTPS. `golf` turns
+//!   keypoints into swing events, tempo and per-view body metrics (at the
+//!   key positions and per frame).
 //!
 //! All times are host monotonic nanoseconds from [`clock::now_ns`].
 //!
@@ -85,7 +91,11 @@ mod error;
 mod frame;
 #[cfg(feature = "frp")]
 pub mod frp;
+#[cfg(all(feature = "pose", not(target_family = "wasm")))]
+pub mod golf;
 pub mod jpeg;
+#[cfg(all(feature = "pose", not(target_family = "wasm")))]
+pub mod pose;
 mod recorder;
 mod ring;
 pub mod sidecar;

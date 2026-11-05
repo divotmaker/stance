@@ -77,6 +77,38 @@ pub enum Error {
     /// JPEG encoding failed.
     #[error("JPEG encoding failed: {0}")]
     Encode(String),
+
+    /// A JPEG frame could not be decoded (`pose` feature).
+    #[cfg(feature = "pose")]
+    #[error("JPEG decoding failed: {0}")]
+    Decode(String),
+
+    /// A model file is missing, doesn't match its SHA-256, or the inference
+    /// runtime rejected it or failed while running it (`pose` feature).
+    #[cfg(feature = "pose")]
+    #[error("model `{model}`: {message}")]
+    Model {
+        /// The model's name ([`ModelSpec::name`](crate::pose::ModelSpec::name)).
+        model: String,
+        /// What went wrong.
+        message: String,
+    },
+
+    /// Fetching a model failed (`pose-download` feature).
+    #[cfg(feature = "pose-download")]
+    #[error("downloading `{url}`: {message}")]
+    Download {
+        /// The URL being fetched.
+        url: String,
+        /// What went wrong.
+        message: String,
+    },
+
+    /// A model download was stopped through its cancel flag
+    /// (`pose-download` feature).
+    #[cfg(feature = "pose-download")]
+    #[error("download cancelled")]
+    Cancelled,
 }
 
 /// `Result` with this crate's [`Error`].
@@ -89,6 +121,17 @@ impl Error {
         Self::Io {
             context: context.into(),
             source,
+        }
+    }
+
+    /// An [`Error::Model`] for a model.
+    #[cfg(feature = "pose")]
+    // Takes the message by value so call sites read `map_err(|e| Error::model(name, e))`.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn model(model: impl Into<String>, message: impl ToString) -> Self {
+        Self::Model {
+            model: model.into(),
+            message: message.to_string(),
         }
     }
 

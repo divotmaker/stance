@@ -17,6 +17,18 @@ name = "stance"
 # Turns Flight Relay Protocol `shot_trigger` events into clip triggers
 # (`stance::frp`).
 frp = ["dep:flightrelay"]
+# Pose estimation (`stance::pose`): RTMPose keypoints, a YOLOX person
+# detector, single-golfer tracking, filters and the offline clip pass. Loads
+# ONNX models from a directory and verifies their SHA-256.
+pose = [
+    "dep:tract-onnx",
+    "dep:tract-linalg",
+    "dep:rayon",
+    "dep:zune-jpeg",
+    "dep:sha2",
+]
+# Fetches the models over HTTPS into a cache directory (`pose::download`).
+pose-download = ["pose", "dep:ureq", "dep:zip"]
 
 [dependencies]
 thiserror = "2"
@@ -26,6 +38,26 @@ serde = { version = "1", features = ["derive"] }
 # to exactly the values written, so a read sidecar equals the written one.
 serde_json = { version = "1", features = ["float_roundtrip"] }
 flightrelay = { version = "0.4", optional = true }
+# `pose`: pure-Rust ONNX inference (one executable, no native libraries,
+# cross-builds to every target the crate supports). No default features: the
+# models need only the core ONNX operators, not `transformers`.
+tract-onnx = { version = "0.23", optional = true, default-features = false }
+# `pose`: tract's own matrix kernels, with `multithread-mm` so one inference
+# can use several cores (a 2-3x lower latency for the live view).
+tract-linalg = { version = "0.23", optional = true, features = ["multithread-mm"] }
+# `pose`: the thread pool tract's multithreaded kernels run on; built here so
+# a failure to start threads is an error, not a panic.
+rayon = { version = "1.10", optional = true }
+# `pose`: decodes MJPEG frames to RGB for the models.
+zune-jpeg = { version = "0.5", optional = true }
+# `pose`: verifies model files against the SHA-256 in their `ModelSpec`.
+sha2 = { version = "0.11", optional = true }
+# `pose-download`: HTTPS (rustls, no OpenSSL) for fetching models; 3.5 for
+# its per-read timeout.
+ureq = { version = "3.5", optional = true, default-features = false, features = ["rustls"] }
+# `pose-download`: extracts the model member from the published zip archives
+# (inflate only, pure Rust).
+zip = { version = "9", optional = true, default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 # Encodes the test pattern's frames. Native targets only: wasm builds carry
 # no sources.
@@ -55,6 +87,18 @@ flightrelay = { version = "0.4", features = ["transport"] }
 [[example]]
 name = "frp_record"
 required-features = ["frp"]
+
+[[example]]
+name = "pose_bench"
+required-features = ["pose"]
+
+[[example]]
+name = "pose_render"
+required-features = ["pose"]
+
+[[example]]
+name = "golf_report"
+required-features = ["pose"]
 
 [lints.rust]
 missing_docs = "warn"
