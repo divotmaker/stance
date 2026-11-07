@@ -19,7 +19,7 @@ pub struct Posture {
     pub setup: Setup,
     /// Spine (pelvis → shoulders) from vertical, degrees. Face-on: lateral
     /// tilt, positive with the shoulders away from the target. Down the
-    /// line: forward bend, positive leaning towards the ball.
+    /// line: forward bend, positive leaning toward the ball.
     pub spine_angle: Option<f64>,
     /// Shoulder line from horizontal, degrees, positive with the lead
     /// shoulder higher (meaningful face-on).
@@ -43,7 +43,7 @@ pub struct Posture {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct HeadShift {
-    /// Along the image's x: towards the target face-on, towards the ball
+    /// Along the image's x: toward the target face-on, toward the ball
     /// down the line.
     pub forward: f64,
     /// Upwards.
@@ -51,7 +51,7 @@ pub struct HeadShift {
 }
 
 /// Keypoints from a mirrored image as an unmirrored camera would see them:
-/// `x` reflected about the image's centre line and left/right labels
+/// `x` reflected about the image's center line and left/right labels
 /// swapped (a pose model labels the mirror image of a left side as a right
 /// side).
 pub(crate) fn unmirror_keypoints(

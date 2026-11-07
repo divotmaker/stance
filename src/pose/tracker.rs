@@ -23,7 +23,7 @@ const MIN_AREA_FRACTION: f32 = 0.005;
 /// detector's box, as when the arms hide the body at the top of the
 /// backswing), the next frame uses the detector's box and detects again.
 ///
-/// The golfer is the most confident large person near the frame centre;
+/// The golfer is the most confident large person near the frame center;
 /// periodic detections keep the same person by IoU with the tracked box. A
 /// pose whose mean score falls below [`PoseConfig::min_pose_score`] gets
 /// one retry (a tracked crop with a fresh detection, a fresh detection with
@@ -209,7 +209,7 @@ pub(crate) fn match_by_iou(dets: &[Detection], target: &BBox, min_iou: f32) -> O
         .map(|(_, b)| b)
 }
 
-/// The most likely golfer: confident, large and near the frame centre.
+/// The most likely golfer: confident, large and near the frame center.
 pub(crate) fn pick_golfer(dets: &[Detection], width: u32, height: u32) -> Option<BBox> {
     // Frame sizes are far below f32's exact-integer range.
     #[allow(clippy::cast_precision_loss)]
@@ -470,7 +470,7 @@ mod tests {
     }
 
     impl Blob {
-        fn centre(&mut self, image: &Image) -> (f32, f32) {
+        fn center(&mut self, image: &Image) -> (f32, f32) {
             self.sizes.push((image.width(), image.height()));
             let (mut sx, mut sy, mut n) = (0.0f32, 0.0f32, 0.0f32);
             for y in 0..image.height() {
@@ -501,7 +501,7 @@ mod tests {
             Ok(Self::default())
         }
         fn estimate(&mut self, image: &Image, bbox: &BBox) -> Result<Pose> {
-            let (x, y) = self.centre(image);
+            let (x, y) = self.center(image);
             let kps = (0..26u8)
                 .map(|i| Keypoint {
                     x: x + f32::from(i % 3),
@@ -521,7 +521,7 @@ mod tests {
             Ok(Self::default())
         }
         fn detect(&mut self, image: &Image) -> Result<Vec<Detection>> {
-            let (x, y) = self.centre(image);
+            let (x, y) = self.center(image);
             Ok(vec![det(x - 30.0, y - 30.0, x + 30.0, y + 30.0, 0.9)])
         }
     }

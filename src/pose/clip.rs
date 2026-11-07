@@ -107,8 +107,8 @@ pub fn analyze_clip<P: PoseEngine, D: PersonDetector>(
 ///    thread of steps 1 and 3 first runs [`PoseConfig::on_worker_start`].
 /// 4. A sequential fix-up pass, forwards then backwards, redoes every frame
 ///    whose pose scores below [`PoseConfig::min_pose_score`] (or has none)
-///    with a box around the neighbouring frame's keypoints, keeping the
-///    better result. A neighbour whose keypoint box has collapsed onto part
+///    with a box around the neighboring frame's keypoints, keeping the
+///    better result. A neighbor whose keypoint box has collapsed onto part
 ///    of the body is not used.
 ///
 /// Frames that fail to decode, frames where nobody is found and frames
@@ -182,7 +182,7 @@ where
         m.pose.estimate(&image, &bbox).map(Some)
     })?;
 
-    // 4. Sequential fix-up from neighbouring keypoints.
+    // 4. Sequential fix-up from neighboring keypoints.
     let mut m = models.fork()?;
     let threshold = config.min_pose_score;
     let weak = |p: &Option<Pose>| p.as_ref().is_none_or(|p| p.score < threshold);
@@ -190,8 +190,8 @@ where
         .map(|i| (i, i.checked_sub(1)))
         .chain((0..n).rev().map(|i| (i, (i + 1 < n).then_some(i + 1))))
         .collect();
-    for (i, neighbour) in order {
-        let Some(j) = neighbour else { continue };
+    for (i, neighbor) in order {
+        let Some(j) = neighbor else { continue };
         if !weak(&poses[i]) || weak(&poses[j]) {
             continue;
         }
@@ -396,7 +396,7 @@ mod tests {
         }
     }
 
-    fn grey_jpeg(level: u8) -> Vec<u8> {
+    fn gray_jpeg(level: u8) -> Vec<u8> {
         let mut out = Vec::new();
         jpeg_encoder::Encoder::new(&mut out, 90)
             .encode(&[level; 64 * 48 * 3], 64, 48, jpeg_encoder::ColorType::Rgb)
@@ -409,7 +409,7 @@ mod tests {
         let levels = [230u8, 230, 230, 230, 230, 230, 20, 20, 20, 230, 230, 230];
         let frames: Vec<(u64, Vec<u8>)> = (0u64..)
             .zip(levels)
-            .map(|(i, l)| (i * 8_333_333, grey_jpeg(l)))
+            .map(|(i, l)| (i * 8_333_333, gray_jpeg(l)))
             .collect();
         let config = PoseConfig {
             detect_every: 4,
@@ -461,7 +461,7 @@ mod tests {
 
     #[test]
     fn the_hook_runs_once_on_every_worker_thread_before_its_work() {
-        let frames: Vec<(u64, Vec<u8>)> = (0u64..12).map(|i| (i, grey_jpeg(230))).collect();
+        let frames: Vec<(u64, Vec<u8>)> = (0u64..12).map(|i| (i, gray_jpeg(230))).collect();
         let hooked: Arc<Mutex<Vec<std::thread::ThreadId>>> = Arc::default();
         let detected: Arc<Mutex<Vec<bool>>> = Arc::default();
         let record = Arc::clone(&hooked);

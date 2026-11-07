@@ -11,21 +11,21 @@ use super::smooth::Frames;
 /// Notation: image `x` grows to the right, `y` downwards. *Pelvis* is the
 /// hips' midpoint, *shoulders* the shoulders' midpoint, *spine* the line
 /// pelvis → shoulders, *hands* the wrists' midpoint, *head* the head-top
-/// keypoint (the nose when it is missing). `fwd` is +1 or −1: towards the
-/// target face-on, towards the ball down the line ([`Setup::forward_x`]).
+/// keypoint (the nose when it is missing). `fwd` is +1 or −1: toward the
+/// target face-on, toward the ball down the line ([`Setup::forward_x`]).
 /// `L` is the torso length (pelvis to shoulders) at address in pixels:
 /// distances are fractions of it ([`Unit::Torso`]) and, given the golfer's
-/// height, centimetres. Shifts are measured from address. *P3* and *P5*
+/// height, centimeters. Shifts are measured from address. *P3* and *P5*
 /// are the lead arm parallel to the ground in the backswing and the
 /// downswing ([`SwingEvents::arm_parallel_back`](super::SwingEvents::arm_parallel_back),
 /// [`SwingEvents::arm_parallel_down`](super::SwingEvents::arm_parallel_down)).
 ///
 /// | Metric | View | Unit | Positions | Formula |
 /// |---|---|---|---|---|
-/// | `hip_sway` | face-on | torso | P3, top, P5, impact | pelvis shift towards the target (negative: away from it): `fwd·(pelvis.x − pelvis₀.x) / L` |
-/// | `chest_sway` | face-on | torso | P3, top, P5, impact | shoulders' shift towards the target (negative: away from it): `fwd·(shoulders.x − shoulders₀.x) / L` |
-/// | `sway_gap` | face-on | torso | address, P3, top, P5, impact | shoulders ahead of the pelvis towards the target: `fwd·(shoulders.x − pelvis.x) / L`; negative with the chest behind the pelvis, as at the top and impact of most full swings |
-/// | `head_lateral` | face-on | torso | P3, top, P5, impact | head shift towards the target: `fwd·(head.x − head₀.x) / L` |
+/// | `hip_sway` | face-on | torso | P3, top, P5, impact | pelvis shift toward the target (negative: away from it): `fwd·(pelvis.x − pelvis₀.x) / L` |
+/// | `chest_sway` | face-on | torso | P3, top, P5, impact | shoulders' shift toward the target (negative: away from it): `fwd·(shoulders.x − shoulders₀.x) / L` |
+/// | `sway_gap` | face-on | torso | address, P3, top, P5, impact | shoulders ahead of the pelvis toward the target: `fwd·(shoulders.x − pelvis.x) / L`; negative with the chest behind the pelvis, as at the top and impact of most full swings |
+/// | `head_lateral` | face-on | torso | P3, top, P5, impact | head shift toward the target: `fwd·(head.x − head₀.x) / L` |
 /// | `head_vertical` | either | torso | top, impact | head rise: `(head₀.y − head.y) / L` |
 /// | `pelvis_lift` | either | torso | top, impact | pelvis rise (negative: it dropped): `(pelvis₀.y − pelvis.y) / L` |
 /// | `lateral_spine_tilt` | face-on | deg | address, P3, top, P5, impact, finish | spine from vertical, positive with the shoulders away from the target; at the finish, where the golfer faces the target and the camera sees them side-on, it is the bend back (the "reverse C") |
@@ -36,19 +36,19 @@ use super::smooth::Frames;
 /// | `hip_width_proxy` | face-on | ratio | top, impact, finish | hip-to-hip distance / its address value: a pelvis-turn proxy, ≈ cos of the turn only if the hips are square to the camera at address, level, and the hip keypoints stay on the pelvis edges; absent when above 1 (not measurable: a turn can't widen the hips) |
 /// | `hip_turn` | face-on | deg | P3, top, P5, impact | pelvis-turn estimate θ from the line solve below on the hip line |
 /// | `shoulder_turn` | face-on | deg | P3, top, P5, impact | shoulder-turn estimate θ from the line solve below on the shoulder line |
-/// | `spine_forward_bend` | down the line | deg | address, P3, top, P5, impact | spine from vertical, positive leaning towards the ball |
+/// | `spine_forward_bend` | down the line | deg | address, P3, top, P5, impact | spine from vertical, positive leaning toward the ball |
 /// | `loss_of_posture` | down the line | deg | P3, top, P5, impact | `spine_forward_bend` at address minus now: positive = more upright |
-/// | `early_extension` | down the line | torso | P3, top, P5, impact | pelvis shift towards the ball: `fwd·(pelvis.x − pelvis₀.x) / L` |
+/// | `early_extension` | down the line | torso | P3, top, P5, impact | pelvis shift toward the ball: `fwd·(pelvis.x − pelvis₀.x) / L` |
 /// | `lead_knee_flex` | down the line | deg | address, top, impact, finish | 180 − lead hip–knee–ankle angle (0 = straight) |
 /// | `trail_knee_flex` | down the line | deg | address, top, impact, finish | 180 − trail hip–knee–ankle angle |
 /// | `trail_elbow_angle` | down the line | deg | address, top, impact | trail shoulder–elbow–wrist angle |
 /// | `hand_height` | down the line | torso | top | hands above the trail shoulder: `(trail_shoulder.y − hands.y) / L` |
 /// | `hand_depth` | down the line | torso | top | hands behind the trail shoulder, away from the ball (negative: nearer the ball than it): `−fwd·(hands.x − trail_shoulder.x) / L` |
 ///
-/// Face-on, the golfer bends towards the camera, so `L` is foreshortened
+/// Face-on, the golfer bends toward the camera, so `L` is foreshortened
 /// by the cosine of the forward bend (about 0.82 for a typical 35° bend)
 /// and face-on fractions read about 20 % larger than the same distance down
-/// the line; centimetres don't have this bias (see [`BodyScale`]). Relative
+/// the line; centimeters don't have this bias (see [`BodyScale`]). Relative
 /// metrics (shifts and changes from address) take their confidence from the
 /// keypoints at address too. Values are rounded to 4 decimal places of
 /// their unit.
@@ -85,7 +85,7 @@ use super::smooth::Frames;
 /// error of the solve. What does limit it, in order:
 ///
 /// 1. **Perspective.** The solve assumes a distant camera. For a golfer
-///    centred in the picture of a 55° lens at chest height, a 45° hip turn
+///    centered in the picture of a 55° lens at chest height, a 45° hip turn
 ///    reads about 0.5° high at 5 m and 1° high at 2 m (a portrait camera in
 ///    a small room), the pelvis midpoint drifts with the turn by under 1 cm
 ///    at 2 m (0.3 cm at 5 m), and a −40° shoulder tilt at the top reads
@@ -99,7 +99,7 @@ use super::smooth::Frames;
 ///    On real swings the shoulder tilt at the top reads less lead-side-down
 ///    than published tour averages (the hidden trail shoulder, and item 1
 ///    up close): treat it as beta.
-/// 3. **Camera roll.** Not modelled: a camera rolled by 2° adds 2° to every
+/// 3. **Camera roll.** Not modeled: a camera rolled by 2° adds 2° to every
 ///    tilt, address included. Level the camera; a non-zero address
 ///    shoulder tilt where you expect level is roll.
 /// 4. **The address is taken as square and level in the image plane.**
@@ -116,7 +116,7 @@ use super::smooth::Frames;
 /// [`norms`](super::norms) grades the metrics against published tour and
 /// amateur averages. Its turns are signed (positive open), so a one-camera
 /// `hip_turn` or `shoulder_turn`, an unsigned size, takes the sign of the
-/// band's centre and is graded at impact only.
+/// band's center and is graded at impact only.
 ///
 /// [`SwingReport::series`](super::SwingReport::series) holds every
 /// measured metric's value at every frame, with the same formulas and
@@ -157,7 +157,7 @@ pub enum MetricId {
 pub enum Unit {
     /// Degrees in the image plane.
     Degrees,
-    /// Fractions of the torso length at address (with centimetres in
+    /// Fractions of the torso length at address (with centimeters in
     /// [`Metric::cm`] when the golfer's height is known).
     Torso,
     /// A dimensionless ratio of two image distances.
@@ -320,7 +320,7 @@ pub struct Metric {
     /// The value at each key position.
     pub values: Positions,
     /// For [`Unit::Torso`] metrics with a known golfer height: the values in
-    /// centimetres.
+    /// centimeters.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cm: Option<Positions>,
     /// `0..=1`: the mean score of the keypoints the values use (at the
@@ -337,7 +337,7 @@ pub struct MetricSeries {
     /// Which metric (definitions on [`MetricId`]).
     pub id: MetricId,
     /// The unit of [`MetricSeries::values`]. For [`Unit::Torso`],
-    /// [`BodyScale::to_cm`] gives centimetres, as in [`Metric::cm`].
+    /// [`BodyScale::to_cm`] gives centimeters, as in [`Metric::cm`].
     pub unit: Unit,
     /// The value at each frame.
     pub values: Vec<Option<f64>>,
@@ -457,7 +457,7 @@ pub struct BodyScale {
     /// it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upright_px: Option<f64>,
-    /// Centimetres per pixel, from the golfer's height: the upright torso
+    /// Centimeters per pixel, from the golfer's height: the upright torso
     /// ([`BodyScale::upright_px`]) is taken as [`TORSO_PER_HEIGHT`] ×
     /// height.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -465,7 +465,7 @@ pub struct BodyScale {
 }
 
 impl BodyScale {
-    /// A [`Unit::Torso`] value in centimetres, when the golfer's height is
+    /// A [`Unit::Torso`] value in centimeters, when the golfer's height is
     /// known.
     #[must_use]
     pub fn to_cm(&self, torso: f64) -> Option<f64> {
@@ -573,7 +573,7 @@ struct Def<'a> {
     /// The keypoints its confidence comes from.
     joints: &'static [Joint],
     /// Measured from the address pose: none without an address, never at
-    /// address, and the address frame's scores count towards the
+    /// address, and the address frame's scores count toward the
     /// confidence.
     relative: bool,
     f: Formula<'a>,
@@ -711,7 +711,7 @@ impl Ctx<'_> {
         })
     }
 
-    /// A point's shift from address along x towards `sign`, in torso lengths.
+    /// A point's shift from address along x toward `sign`, in torso lengths.
     fn shift_x(
         &self,
         now: Option<super::body::Pt>,

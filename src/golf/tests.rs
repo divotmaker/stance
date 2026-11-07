@@ -70,7 +70,7 @@ impl Phases {
 }
 
 /// The hands' angle about the shoulders (radians, 0 hanging down, positive
-/// towards the right-hander's lead side, +x) for a swing reaching `swing`
+/// toward the right-hander's lead side, +x) for a swing reaching `swing`
 /// degrees: still, a cosine backswing to the trail side, an accelerating
 /// downswing that is fastest at impact, and a decelerating follow-through
 /// to the lead side, then still.
@@ -110,7 +110,7 @@ struct Figure {
     hip_turn: Phases,
     /// Shoulder half-width (the true half-length of the shoulder line).
     shoulder_half: Phases,
-    /// Spine tilt from vertical, positive towards +x.
+    /// Spine tilt from vertical, positive toward +x.
     spine: Phases,
     /// Shoulder midpoint x shift on top of the spine tilt.
     chest_dx: Phases,
@@ -549,7 +549,7 @@ fn tempo() {
         e.impact.unwrap().t_ns - e.top.unwrap().t_ns
     );
     assert!((tempo.ratio - tempo.backswing_ns as f64 / tempo.downswing_ns as f64).abs() < 1e-12);
-    // 1.0 s up and 0.4 s down (2.5:1): the takeaway's first millimetres,
+    // 1.0 s up and 0.4 s down (2.5:1): the takeaway's first millimeters,
     // the downswing's gentle start and the impact 25 ms after the hands'
     // low point shift it a little.
     assert!((2.2..=2.9).contains(&tempo.ratio), "ratio {}", tempo.ratio);
@@ -604,7 +604,7 @@ fn face_on_metrics() {
     let cm = scale.cm_per_px.unwrap();
     assert!((cm - TORSO_PER_HEIGHT * 180.0 / TORSO).abs() < 1e-6);
     let tol = 1e-3;
-    // Hip sway: 20 px away from the target at the top, 30 px towards it at
+    // Hip sway: 20 px away from the target at the top, 30 px toward it at
     // impact.
     let sway = r.metric(MetricId::HipSway).unwrap();
     assert!(near(sway.values.top, -20.0 / TORSO, tol), "{sway:?}");
@@ -758,7 +758,7 @@ fn every_metric_has_a_value_per_frame_matching_its_positions() {
                         assert_eq!(s.value_at(m.id, e_t(event)), Some(v));
                     }
                 }
-                // Centimetres follow the body scale as the positions' do.
+                // Centimeters follow the body scale as the positions' do.
                 if let (Some(cm), Some(top)) = (m.cm, m.values.top) {
                     assert_eq!(r.scale.unwrap().to_cm(top), cm.top);
                 }
@@ -1039,7 +1039,7 @@ fn left_handers_mirror_right_handers() {
             }
             if figure.view == View::FaceOn {
                 // Hip sway is signed by the target, not the image: away from
-                // it at the top, towards it at impact, for either hand.
+                // it at the top, toward it at impact, for either hand.
                 for report in [&r, &l] {
                     let sway = value(report, MetricId::HipSway);
                     assert!(
@@ -1050,7 +1050,7 @@ fn left_handers_mirror_right_handers() {
             }
             assert_eq!(l.handed_guess.unwrap().value, Handed::Left);
             assert_eq!(r.handed_guess.unwrap().value, Handed::Right);
-            // The right-hander's mirror image analysed as right-handed is
+            // The right-hander's mirror image analyzed as right-handed is
             // flagged.
             let wrong = analyze_swing(&left, &options(figure.view, Handed::Right, impact)).unwrap();
             assert_eq!(wrong.handed_guess.unwrap().value, Handed::Left);
@@ -1096,7 +1096,7 @@ fn gaps_are_filled_or_left_empty_never_zero() {
         );
         assert!(
             (k.score - 0.45).abs() < 1e-6,
-            "interpolated: half the neighbours' score"
+            "interpolated: half the neighbors' score"
         );
     }
     assert!(smoothed.frames[frame_at(3.2)].keypoints.is_empty());
@@ -1130,7 +1130,7 @@ fn gaps_are_filled_or_left_empty_never_zero() {
         1e-3
     ));
 
-    // Too little to analyse.
+    // Too little to analyze.
     let mut empty = clean.clone();
     for f in &mut empty.frames[2..] {
         *f = PoseFrame::empty(f.t_ns);
@@ -1894,7 +1894,7 @@ fn hip_and_shoulder_tilt_from_the_line_solve() {
     assert!(overstated > tilt.impact.unwrap() + 3.0);
 
     // Square and a little longer than at address at impact (keypoint noise,
-    // a step towards the camera): no turn, and the tilt is the line's angle.
+    // a step toward the camera): no turn, and the tilt is the line's angle.
     let mut long = figure;
     (long.shoulder_half.impact, long.shoulder_turn.impact) = (88.0, 0.0);
     opts.handed = Handed::Right;
@@ -2196,13 +2196,13 @@ fn hands_hovering_at_shoulder_height_keep_p3_and_p5_off_the_top() {
     assert!(off_the_top > 0);
 }
 
-/// Metres per figure pixel for the pinhole figure: a 0.5 m torso.
+/// Meters per figure pixel for the pinhole figure: a 0.5 m torso.
 const PINHOLE_M_PER_PX: f64 = 0.5 / TORSO;
 
 /// The face-on figure as a pinhole camera with a 55° horizontal field of
-/// view across [`WIDTH`] sees it from `distance` metres, centred on the
+/// view across [`WIDTH`] sees it from `distance` meters, centered on the
 /// image: each turned body line's ends move in depth by
-/// `half·cos(tilt)·sin(turn)` (the lead end towards the camera), every
+/// `half·cos(tilt)·sin(turn)` (the lead end toward the camera), every
 /// other keypoint stays in the body's plane.
 fn pinhole_track(figure: &Figure, distance: f64) -> PoseTrack {
     let focal = f64::from(WIDTH) / 2.0 / 27.5f64.to_radians().tan();
@@ -2248,12 +2248,12 @@ fn pinhole_figure() -> Figure {
 }
 
 /// The line solve against a pinhole camera (55° horizontal field of view,
-/// at chest height, the golfer centred at address; 0.5 m torso, 0.35 m hip
+/// at chest height, the golfer centered at address; 0.5 m torso, 0.35 m hip
 /// line turned 45° at the top). Measured: the hip turn at the top reads
 /// 45.5° at 5 m, 45.7° at 3 m and 45.9° at 2 m; the hip sway at the top is
 /// off by 0.3 cm at 5 m and 0.75 cm at 2 m; the shoulder tilt at the top
 /// (−40°) reads −37.9° at 5 m and −35.0° at 2 m. The impact hip turn
-/// (25.8°, the pelvis 7.5 cm towards the target) reads 23.1° at 2 m: a body
+/// (25.8°, the pelvis 7.5 cm toward the target) reads 23.1° at 2 m: a body
 /// off the camera's axis by `x` at distance `D` is seen turned by about
 /// `x / D` radians.
 #[test]
@@ -2267,7 +2267,7 @@ fn the_line_solve_through_a_pinhole_camera() {
         assert_eq!(figure.hip_turn.at(top), 45.0);
         let turn = value(&r, MetricId::HipTurn).top.unwrap();
         assert!((turn - 45.0).abs() < turn_error, "{distance} m: {turn}");
-        // Torso units to centimetres with the 0.5 m torso.
+        // Torso units to centimeters with the 0.5 m torso.
         let sway = value(&r, MetricId::HipSway).top.unwrap() * 50.0;
         let bias = sway - figure.pelvis_dx.at(top) / TORSO * 50.0;
         assert!(bias.abs() < 1.0, "{distance} m: hip sway off by {bias} cm");
@@ -2288,7 +2288,7 @@ fn a_portrait_camera_reads_the_same_through_rotation() {
             k.y += 240.0;
         }
     }
-    // A camera on its side records the picture turned anticlockwise: a
+    // A camera on its side records the picture turned counterclockwise: a
     // landscape frame. The pose pass's `Rotation::Cw90` turns it back.
     let turn = |track: &PoseTrack, r: Rotation| {
         let mut out = track.clone();
@@ -2304,12 +2304,12 @@ fn a_portrait_camera_reads_the_same_through_rotation() {
     };
     let recorded = turn(&upright, Rotation::Ccw90);
     assert_eq!((recorded.width, recorded.height), (1280, 800));
-    let analysed = turn(&recorded, Rotation::Cw90);
-    assert_eq!((analysed.width, analysed.height), (800, 1280));
+    let analyzed = turn(&recorded, Rotation::Cw90);
+    assert_eq!((analyzed.width, analyzed.height), (800, 1280));
     let mut opts = options(View::FaceOn, Handed::Right, Some(IMPACT_S));
     opts.smoothing = raw();
     let a = analyze_swing(&upright, &opts).unwrap();
-    let b = analyze_swing(&analysed, &opts).unwrap();
+    let b = analyze_swing(&analyzed, &opts).unwrap();
     assert_eq!(a.events, b.events);
     assert_eq!(a.metrics.len(), b.metrics.len());
     for (m, n) in a.metrics.iter().zip(&b.metrics) {
@@ -2420,7 +2420,7 @@ fn the_builtin_table_loads_and_names_only_known_ids() {
             assert_eq!(b.position, Position::Swing);
             assert!(matches!(b.unit, NormUnit::Ratio | NormUnit::Seconds));
         }
-        assert!(b.sd > 0.0 && b.centre.is_finite(), "{b:?}");
+        assert!(b.sd > 0.0 && b.center.is_finite(), "{b:?}");
         assert!(!b.sources.is_empty(), "{b:?}");
         for s in &b.sources {
             assert!(norms.sources.contains_key(s), "source {s}");
@@ -2438,7 +2438,7 @@ fn the_builtin_table_loads_and_names_only_known_ids() {
             assert!(b.sources.len() > 1, "{b:?}");
         }
         // Turns are signed positive open, so their words name closed below
-        // the centre and open above it (`Grade::phrase` relies on it).
+        // the center and open above it (`Grade::phrase` relies on it).
         for (miss, want) in [(&b.low, Direction::Closed), (&b.high, Direction::Open)] {
             if let Some(m) = miss
                 && matches!(m.direction, Direction::Open | Direction::Closed)
@@ -2481,7 +2481,7 @@ fn the_builtin_table_loads_and_names_only_known_ids() {
 fn turn_words_follow_the_values_sign() {
     let norms = Norms::builtin().unwrap();
     let shoulders = |v| grade_deg(norms, MetricId::ShoulderTurn, Position::Impact, v).unwrap();
-    // 15° open against the tour's 30° open: short of the centre on its
+    // 15° open against the tour's 30° open: short of the center on its
     // side, so less open, not more closed.
     let g = shoulders(15.0);
     assert_eq!(
@@ -2495,12 +2495,12 @@ fn turn_words_follow_the_values_sign() {
     );
     // One camera reads a size: −15 is 15° open too.
     assert_eq!(shoulders(-15.0).fit_word(), g.fit_word());
-    // In the draw band, short of the centre.
+    // In the draw band, short of the center.
     assert_eq!(
         shoulders(26.0).fit_word().unwrap(),
         "Shoulder turn less open: draw side"
     );
-    // Beyond the centre: more open.
+    // Beyond the center: more open.
     assert_eq!(
         shoulders(45.0).fit_word().unwrap(),
         "Shoulder turn more open than tour: out-to-in, pull or slice pattern"
@@ -2512,16 +2512,16 @@ fn turn_words_follow_the_values_sign() {
     // On the far side of zero: more closed.
     let mut far = g.clone();
     far.value = -5.0;
-    far.z = (far.value - far.centre) / far.sd;
+    far.z = (far.value - far.center) / far.sd;
     assert_eq!(far.phrase(), Some("more closed"));
     assert_eq!(
         far.fit_word().unwrap(),
         "Shoulder turn more closed than tour: shoulders behind, push or hook"
     );
-    // Zero is not short of the centre: it has no direction of its own.
+    // Zero is not short of the center: it has no direction of its own.
     far.value = 0.0;
     assert_eq!(far.phrase(), Some("more closed"));
-    // A closed centre (the top, 98° closed): 75° closed is less closed,
+    // A closed center (the top, 98° closed): 75° closed is less closed,
     // 110° closed more closed.
     let ctx = tour_driver();
     let top = |v| {
@@ -2564,7 +2564,7 @@ fn turn_words_follow_the_values_sign() {
         g.fit_word().unwrap(),
         "Hip turn less closed than amateurs: restricted hip turn, arms-only backswing, loss of coil"
     );
-    // Positional and magnitude words are unchanged short of the centre:
+    // Positional and magnitude words are unchanged short of the center:
     // hips 1 in toward the target at impact against 4 in toward.
     let sway = norms
         .grade_value(
@@ -2618,14 +2618,14 @@ fn a_shape_linked_band_fits_both_fade_draw_near_far() {
         assert_eq!(
             g.fade,
             Some(Range {
-                centre: 41.0,
+                center: 41.0,
                 sd: 5.0
             })
         );
         assert_eq!(
             g.draw,
             Some(Range {
-                centre: 35.0,
+                center: 35.0,
                 sd: 5.0
             })
         );
@@ -2720,7 +2720,7 @@ fn a_personal_band_with_one_shape_never_fits_both() {
     let mut b = hip_turn_impact();
     b.reference = Reference::Personal;
     b.fade = Some(Range {
-        centre: 45.0,
+        center: 45.0,
         sd: 4.0,
     });
     let norms = table(b.clone());
@@ -2826,7 +2826,7 @@ fn unknown_rows_are_skipped_not_errors() {
     let row = |metric: &str, position: &str, club: &str, direction: &str| {
         format!(
             r#"{{ "metric": "{metric}", "position": "{position}", "club": {club}, "sex": null,
-                 "reference": "tour", "centre": 1, "sd": 1, "unit": "degrees",
+                 "reference": "tour", "center": 1, "sd": 1, "unit": "degrees",
                  "sd_source": "proxy", "confidence": "low", "future_field": [1, 2],
                  "low": {{ "direction": "{direction}", "tends_to": "x" }} }}"#
         )
@@ -2843,8 +2843,8 @@ fn unknown_rows_are_skipped_not_errors() {
     assert_eq!(norms.skipped(), 4);
     assert_eq!(norms.bands().len(), 1);
     assert_eq!(norms.bands()[0].club, Some(ClubClass::Driver));
-    // A known row without a centre is an error, as is version 2.
-    let broken = json.replacen(r#""centre": 1, "#, "", 5);
+    // A known row without a center is an error, as is version 2.
+    let broken = json.replacen(r#""center": 1, "#, "", 5);
     assert!(matches!(
         Norms::from_json(&broken),
         Err(crate::Error::InvalidArgument(_))
@@ -2872,12 +2872,12 @@ fn the_builtin_table_never_panics_on_a_bad_embed() {
 
 #[test]
 fn lookup_falls_back_by_sex_then_club_and_null_sex_wins() {
-    let band = |club: Option<ClubClass>, sex: Option<Sex>, centre: f64| {
+    let band = |club: Option<ClubClass>, sex: Option<Sex>, center: f64| {
         let mut b = Band::new(
             MetricId::HipTilt,
             Position::Impact,
             Reference::Tour,
-            centre,
+            center,
             5.0,
             NormUnit::Degrees,
         );
@@ -2904,7 +2904,7 @@ fn lookup_falls_back_by_sex_then_club_and_null_sex_wins() {
     );
     // A woman with a wedge: the mid-iron male band, both flags.
     let l = norms.band(&q(ClubClass::Wedge, Sex::Female)).unwrap();
-    assert_eq!(l.band.centre, 7.0);
+    assert_eq!(l.band.center, 7.0);
     assert!(l.club_fallback && l.sex_fallback);
     // The flags reach the grade.
     let ctx = Context::new(ClubClass::Wedge, Sex::Female, Reference::Tour);
@@ -2921,20 +2921,20 @@ fn lookup_falls_back_by_sex_then_club_and_null_sex_wins() {
         .unwrap();
     assert!(g.club_fallback && g.sex_fallback);
     let l = norms.band(&q(ClubClass::Driver, Sex::Male)).unwrap();
-    assert!(!l.club_fallback && !l.sex_fallback && l.band.centre == 8.0);
+    assert!(!l.club_fallback && !l.sex_fallback && l.band.center == 8.0);
     // A `club: null` row wins over the wedge fallback.
     let mut with_any = norms.bands().to_vec();
     with_any.push(band(None, Some(Sex::Male), 6.0));
     let norms = Norms::from_bands(1, std::collections::BTreeMap::new(), with_any);
     let l = norms.band(&q(ClubClass::Wedge, Sex::Male)).unwrap();
-    assert_eq!(l.band.centre, 6.0);
+    assert_eq!(l.band.center, 6.0);
     assert!(!l.club_fallback);
     // A `sex: null` row wins over the male row for a woman.
     let mut with_either = norms.bands().to_vec();
     with_either.push(band(Some(ClubClass::Driver), None, 5.0));
     let norms = Norms::from_bands(1, std::collections::BTreeMap::new(), with_either);
     let l = norms.band(&q(ClubClass::Driver, Sex::Female)).unwrap();
-    assert_eq!(l.band.centre, 5.0);
+    assert_eq!(l.band.center, 5.0);
     assert!(!l.sex_fallback);
     // A man keeps his own row.
     assert_eq!(
@@ -2942,7 +2942,7 @@ fn lookup_falls_back_by_sex_then_club_and_null_sex_wins() {
             .band(&q(ClubClass::Driver, Sex::Male))
             .unwrap()
             .band
-            .centre,
+            .center,
         8.0
     );
     // No row at all: none.
@@ -2969,7 +2969,7 @@ fn lookup_falls_back_by_sex_then_club_and_null_sex_wins() {
             Reference::Tour,
         ))
         .unwrap();
-    assert_eq!(l.band.centre, 3.7);
+    assert_eq!(l.band.center, 3.7);
     assert!(l.club_fallback && !l.sex_fallback);
 }
 
@@ -2994,7 +2994,7 @@ fn inches_bands_use_the_height_or_an_assumed_one() {
     assert_eq!(g.scale, Scale::Measured);
     assert!((g.value + 0.6).abs() < 1e-12 && g.fit == Fit::Both);
     assert_eq!(g.unit, NormUnit::Inches);
-    // No centimetres: the body scale and an assumed 177 cm.
+    // No centimeters: the body scale and an assumed 177 cm.
     let scale = BodyScale {
         torso_px: 200.0,
         upright_px: Some(220.0),
@@ -3076,7 +3076,7 @@ fn one_camera_turns_take_the_bands_sign() {
     // 38 at impact: +38, Both.
     let g = grade_deg(norms, MetricId::HipTurn, Position::Impact, 38.0).unwrap();
     assert_eq!((g.value, g.fit), (38.0, Fit::Both));
-    // At P5 the hips' centre (−11) is within 2 SD (6) of zero: no grade.
+    // At P5 the hips' center (−11) is within 2 SD (6) of zero: no grade.
     assert!(any(MetricId::HipTurn, Position::ArmParallelDown, 11.0).is_none());
     // The impact-only rule: no grade at the top, at P3 or at P5, whatever
     // the rows.
@@ -3130,7 +3130,7 @@ fn ungraded_rows_are_found_but_not_graded() {
         Reference::Tour,
     );
     let l = norms.band(&q).unwrap();
-    assert!(!l.band.graded && l.band.centre == 33.0);
+    assert!(!l.band.graded && l.band.center == 33.0);
     assert!(grade_deg(norms, MetricId::LateralSpineTilt, Position::Finish, 33.0).is_none());
     // The flag round-trips through JSON as `"grade": false`.
     let json = serde_json::to_string(l.band).unwrap();
@@ -3344,7 +3344,7 @@ fn the_tour_figure_grades_every_band_both() {
                 _ => m.values.at(g.position).unwrap(),
             };
             assert!((g.value - want).abs() < 1e-9, "{g:?}");
-            assert!((g.z - (g.value - g.centre) / g.sd).abs() < 1e-9);
+            assert!((g.z - (g.value - g.center) / g.sd).abs() < 1e-9);
             assert_eq!(
                 g.scale,
                 if m.unit == Unit::Torso {
@@ -3364,16 +3364,16 @@ fn the_tour_figure_grades_every_band_both() {
             assert_eq!(g.fit, Fit::Both, "{g:?}");
             assert!(g.miss.is_none() && g.fit_word().is_none());
         }
-        // The same report with P3 and P5 set to their band centres grades
+        // The same report with P3 and P5 set to their band centers grades
         // Both there too.
-        let mut at_centres = report.clone();
-        for m in &mut at_centres.metrics {
+        let mut at_centers = report.clone();
+        for m in &mut at_centers.metrics {
             for p in [Position::ArmParallelBack, Position::ArmParallelDown] {
                 let Some(l) = norms.band(&Query::new(m.id, p, ctx.club, ctx.sex, ctx.reference))
                 else {
                     continue;
                 };
-                let c = l.band.centre;
+                let c = l.band.center;
                 if slot(&mut m.values, p).is_none() {
                     continue;
                 }
@@ -3384,7 +3384,7 @@ fn the_tour_figure_grades_every_band_both() {
                 }
             }
         }
-        for g in norms.grade_report(&at_centres, &ctx) {
+        for g in norms.grade_report(&at_centers, &ctx) {
             assert_eq!(g.fit, Fit::Both, "{g:?}");
         }
         // Left-handed: the mirror image grades identically.
@@ -3461,8 +3461,8 @@ fn each_fault_figure_names_its_miss() {
         Side::High,
         Direction::Toward,
     );
-    // A reverse pivot: hips towards the target and the spine leaning
-    // towards it at the top.
+    // A reverse pivot: hips toward the target and the spine leaning
+    // toward it at the top.
     let mut f = tour_face_on();
     f.pelvis_dx.top = inches(3.0);
     check(
@@ -3603,7 +3603,7 @@ fn each_fault_figure_names_its_miss() {
 }
 
 #[test]
-fn grades_serialise() {
+fn grades_serialize() {
     let norms = Norms::builtin().unwrap();
     let g = grade_deg(norms, MetricId::HipTurn, Position::Impact, 52.0).unwrap();
     let json = serde_json::to_string(&g).unwrap();
@@ -3641,9 +3641,9 @@ fn the_norms_doc_lists_every_band() {
             Some(_) => "wedge",
             None => "any",
         };
-        let centre = format!("{}", b.centre).replace('-', "−");
+        let center = format!("{}", b.center).replace('-', "−");
         let row = format!(
-            "| `{}` | {} | {club} | {centre}",
+            "| `{}` | {} | {club} | {center}",
             metric.as_str().unwrap(),
             position(b.position)
         );

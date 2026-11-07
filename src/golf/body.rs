@@ -55,7 +55,7 @@ pub enum Joint {
     /// Top of the head.
     Head,
     Neck,
-    /// Hip centre.
+    /// Hip center.
     Hip,
     LeadBigToe,
     TrailBigToe,
@@ -104,22 +104,22 @@ pub struct Setup {
 }
 
 impl Setup {
-    /// `+1.0` when the target is towards +x in the image, `−1.0` when
-    /// towards −x; `None` down the line (the target is into the image).
+    /// `+1.0` when the target is toward +x in the image, `−1.0` when
+    /// toward −x; `None` down the line (the target is into the image).
     #[must_use]
     pub fn target_x(self) -> Option<f64> {
         (self.view == View::FaceOn).then(|| self.sign())
     }
 
-    /// `+1.0` when the golfer faces +x (towards the ball), `−1.0` when −x;
+    /// `+1.0` when the golfer faces +x (toward the ball), `−1.0` when −x;
     /// `None` face-on (the golfer faces the camera).
     #[must_use]
     pub fn ball_x(self) -> Option<f64> {
         (self.view == View::DownTheLine).then(|| self.sign())
     }
 
-    /// The image direction "forward" means in this view: towards the target
-    /// face-on, towards the ball down the line.
+    /// The image direction "forward" means in this view: toward the target
+    /// face-on, toward the ball down the line.
     #[must_use]
     pub fn forward_x(self) -> f64 {
         self.sign()
@@ -171,7 +171,7 @@ pub(crate) fn angle_at(a: Pt, b: Pt, c: Pt) -> Option<f64> {
 }
 
 /// The tilt of the segment `lower → upper` from vertical, degrees; positive
-/// when `upper` lies towards `sign` (±1 in x) of `lower`. Range ±180.
+/// when `upper` lies toward `sign` (±1 in x) of `lower`. Range ±180.
 pub(crate) fn tilt_from_vertical(lower: Pt, upper: Pt, sign: f64) -> Option<f64> {
     let (dx, up) = (sign * (upper.x - lower.x), lower.y - upper.y);
     (dx.hypot(up) > 1e-9).then(|| dx.atan2(up).to_degrees())
@@ -225,7 +225,7 @@ impl Body {
         self.pair(Joint::LeadShoulder, Joint::TrailShoulder)
     }
 
-    /// The pelvis centre: the midpoint of the hips.
+    /// The pelvis center: the midpoint of the hips.
     pub fn pelvis(&self) -> Option<Pt> {
         self.pair(Joint::LeadHip, Joint::TrailHip)
     }
@@ -258,7 +258,7 @@ impl Body {
         angle_at(self.at(a)?, self.at(b)?, self.at(c)?)
     }
 
-    /// Spine (pelvis → shoulder midpoint) tilt from vertical towards `sign`.
+    /// Spine (pelvis → shoulder midpoint) tilt from vertical toward `sign`.
     pub fn spine_tilt(&self, sign: f64) -> Option<f64> {
         tilt_from_vertical(self.pelvis()?, self.shoulders()?, sign)
     }

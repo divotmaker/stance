@@ -43,7 +43,7 @@ impl Default for Smoothing {
 
 /// A smoothed track: per frame, each keypoint's position (where usable) and
 /// score (interpolated keypoints carry half the lower score of their two
-/// neighbours, gaps 0).
+/// neighbors, gaps 0).
 #[derive(Debug, Clone)]
 pub(crate) struct Frames {
     pub t_ns: Vec<u64>,
@@ -195,7 +195,7 @@ fn fill_gaps(t_ns: &[u64], raw: &[Body], k: usize, max_gap_ns: u64) -> (Vec<Opti
 ///
 /// Keypoints in a gap longer than [`Smoothing::max_gap_ns`] keep their raw
 /// position with score 0; interpolated keypoints score half the lower score
-/// of their neighbours. `split_at_ns` is the impact time (ns on the track's
+/// of their neighbors. `split_at_ns` is the impact time (ns on the track's
 /// time base), where filtering is split.
 ///
 /// # Errors

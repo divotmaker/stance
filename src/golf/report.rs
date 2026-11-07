@@ -41,7 +41,7 @@ pub struct SwingOptions {
     /// impact alone ([`ImpactSource::Given`]).
     /// `None` estimates it from the hands.
     pub impact_ns: Option<u64>,
-    /// The golfer's height (cm), for distances in centimetres.
+    /// The golfer's height (cm), for distances in centimeters.
     pub height_cm: Option<f64>,
     /// The track comes from a mirrored image (a selfie-style preview): it is
     /// unmirrored before analysis, so [`SwingOptions::handed`] is the
@@ -198,7 +198,7 @@ fn unmirror_track(track: &PoseTrack) -> PoseTrack {
     out
 }
 
-/// Analyses one swing from its clip's pose track.
+/// Analyzes one swing from its clip's pose track.
 ///
 /// 1. A mirrored track ([`SwingOptions::mirrored`]) is unmirrored.
 /// 2. Keypoints are cleaned and smoothed ([`Smoothing`]).
@@ -324,11 +324,11 @@ impl SwingReport {
         clip_avi.with_file_name(format!("{stem}.swing.json"))
     }
 
-    /// Serialises the report.
+    /// Serializes the report.
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidArgument`] if serialisation fails (a non-finite
+    /// [`Error::InvalidArgument`] if serialization fails (a non-finite
     /// number).
     pub fn to_json(&self) -> Result<String> {
         serde_json::to_string(self)

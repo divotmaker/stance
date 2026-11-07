@@ -322,9 +322,9 @@ fn print_grades(ctx: &Context, grades: &[Grade]) {
     ));
     for g in grades {
         let u = unit_suffix(g.unit);
-        let mut band = format!("{:.1} ± {:.1}{u}", g.centre, g.sd);
+        let mut band = format!("{:.1} ± {:.1}{u}", g.center, g.sd);
         if let (Some(f), Some(d)) = (g.fade, g.draw) {
-            band = format!("{:.1}/{:.1} ± {:.1}{u}", f.centre, d.centre, g.sd);
+            band = format!("{:.1}/{:.1} ± {:.1}{u}", f.center, d.center, g.sd);
         }
         let shape = match (g.z_fade, g.z_draw) {
             (Some(f), Some(d)) => format!("{f:+.2}/{d:+.2}"),

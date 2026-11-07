@@ -11,7 +11,7 @@ You may obtain a copy of the License at
 The `pose` module (src/pose/) contains code ported from rtmlib
 (https://github.com/Tau-J/rtmlib) by Tau-J and contributors, licensed under
 the Apache License, Version 2.0: the RTMPose pre- and post-processing
-(box to crop, affine warp, normalisation, SimCC decoding), the YOLOX output
+(box to crop, affine warp, normalization, SimCC decoding), the YOLOX output
 decoding and non-maximum suppression, and the detect-every-N-frames pose
 tracking scheme.
 
@@ -27,4 +27,4 @@ That code derives in turn from:
   publishes the YOLOX weights the module loads.
 
 The pose models are not part of this repository or the published crate.
-They are downloaded separately; their licences are listed in README.md.
+They are downloaded separately; their licenses are listed in README.md.

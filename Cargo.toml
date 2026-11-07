@@ -32,7 +32,7 @@ pose-download = ["pose", "dep:ureq", "dep:zip"]
 
 [dependencies]
 thiserror = "2"
-# Camera info, formats and the clip sidecar are serialisable.
+# Camera info, formats and the clip sidecar are serializable.
 serde = { version = "1", features = ["derive"] }
 # `float_roundtrip`: sidecar frame rates (nominal and measured fps) parse back
 # to exactly the values written, so a read sidecar equals the written one.

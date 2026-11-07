@@ -84,15 +84,15 @@ fn mf_error(context: &str) -> impl FnOnce(windows::core::Error) -> Error + '_ {
     move |e| Error::device(context, e)
 }
 
-/// COM + Media Foundation initialisation for the current thread.
+/// COM + Media Foundation initialization for the current thread.
 struct Runtime {
     com: bool,
 }
 
 impl Runtime {
     fn new() -> Result<Self> {
-        // SAFETY: plain initialisation calls; balanced in Drop. COM may
-        // already be initialised in another mode on this thread, in which case
+        // SAFETY: plain initialization calls; balanced in Drop. COM may
+        // already be initialized in another mode on this thread, in which case
         // it is left alone.
         unsafe {
             let com = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
@@ -344,7 +344,7 @@ struct SharedSource(IMFMediaSource);
 // `windows` wrapper, and only `Shutdown` is called through it (see
 // `MfDevice::interrupter`).
 unsafe impl Send for SharedSource {}
-// SAFETY: as for `Send`; calls through a shared reference are serialised by
+// SAFETY: as for `Send`; calls through a shared reference are serialized by
 // the `interrupt_slot` mutex anyway.
 unsafe impl Sync for SharedSource {}
 

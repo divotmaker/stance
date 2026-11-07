@@ -1,9 +1,9 @@
 //! RTMPose: top-down keypoints with a SimCC head.
 //!
 //! A port of rtmlib's `RTMPose` (Apache-2.0, <https://github.com/Tau-J/rtmlib>):
-//! box → centre and size with 1.25 padding, widened or heightened to the
+//! box → center and size with 1.25 padding, widened or heightened to the
 //! model's 3:4 aspect → affine warp to 192×256 (bilinear) → per-channel
-//! mean/std normalisation of the RGB pixels → SimCC: per keypoint, the argmax
+//! mean/std normalization of the RGB pixels → SimCC: per keypoint, the argmax
 //! of the x and y vectors divided by the split ratio (2.0), the score the
 //! mean of the two maxima → back to image pixels through the inverse warp.
 

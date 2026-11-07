@@ -117,11 +117,11 @@ impl Sidecar {
         Ok(s)
     }
 
-    /// Serialises the sidecar as pretty-printed JSON.
+    /// Serializes the sidecar as pretty-printed JSON.
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidSidecar`] if serialisation fails (non-finite rates).
+    /// [`Error::InvalidSidecar`] if serialization fails (non-finite rates).
     pub fn to_json(&self) -> Result<String> {
         serde_json::to_string_pretty(self).map_err(|e| Error::InvalidSidecar(e.to_string()))
     }

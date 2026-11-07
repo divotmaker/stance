@@ -1,4 +1,4 @@
-//! Drawing on [`Image`]s, for previews and reports: blended lines and discs,
+//! Drawing on [`Image`]s, for previews and reports: blended lines and disks,
 //! a pose skeleton, and text in a 5×7 pixel font. Pure Rust, no
 //! dependencies.
 //!
@@ -8,7 +8,7 @@ use super::Keypoint;
 use super::image::Image;
 use super::skeleton::{Side, Skeleton};
 
-/// An RGB colour.
+/// An RGB color.
 pub type Rgb = [u8; 3];
 
 /// The person's left side (cyan).
@@ -20,7 +20,7 @@ pub const CENTER: Rgb = [255, 255, 255];
 /// The background of [`text_panel`] (black, at 60 % opacity).
 pub const PANEL: Rgb = [0, 0, 0];
 
-/// The colour of a side of the body.
+/// The color of a side of the body.
 #[must_use]
 pub fn side_color(side: Side) -> Rgb {
     match side {
@@ -70,8 +70,8 @@ fn span(lo: f32, hi: f32, r: f32, size: u32) -> std::ops::RangeInclusive<i64> {
     clip((lo - r).floor()).max(0)..=clip((hi + r).ceil()).min(i64::from(size) - 1)
 }
 
-/// A filled disc of radius `r` centred on `c`.
-pub fn disc(img: &mut Image, c: (f32, f32), r: f32, color: Rgb, alpha: f32) {
+/// A filled disk of radius `r` centered on `c`.
+pub fn disk(img: &mut Image, c: (f32, f32), r: f32, color: Rgb, alpha: f32) {
     if !(c.0.is_finite() && c.1.is_finite() && r.is_finite()) {
         return;
     }
@@ -167,7 +167,7 @@ pub fn skeleton(img: &mut Image, skeleton: Skeleton, keypoints: &[Keypoint], sty
         );
     }
     for (i, kp) in k.iter().enumerate().filter(|(_, kp)| kp.score > 0.0) {
-        disc(
+        disk(
             img,
             (kp.x, kp.y),
             2.0 * style.scale,
@@ -312,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn line_and_disc_cover_the_expected_pixels() {
+    fn line_and_disk_cover_the_expected_pixels() {
         let mut img = black(20, 20);
         line(&mut img, (2.0, 10.0), (17.0, 10.0), 1.0, CENTER, 1.0);
         assert_eq!(lit(&img), 16);
@@ -320,10 +320,10 @@ mod tests {
         assert_eq!(img.pixel(17, 10), Some(CENTER));
         assert_eq!(img.pixel(10, 11), Some([0, 0, 0]));
         let mut img = black(20, 20);
-        disc(&mut img, (10.0, 10.0), 2.0, LEFT, 1.0);
+        disk(&mut img, (10.0, 10.0), 2.0, LEFT, 1.0);
         assert_eq!(lit(&img), 13);
         // Huge, off-image and non-finite shapes are clipped or skipped.
-        disc(&mut img, (1e30, -1e30), 1e30, LEFT, 1.0);
+        disk(&mut img, (1e30, -1e30), 1e30, LEFT, 1.0);
         line(&mut img, (f32::NAN, 0.0), (5.0, 5.0), 2.0, LEFT, 1.0);
         line(&mut img, (-1e9, -1e9), (-1e9, 1e9), 3.0, LEFT, 1.0);
     }

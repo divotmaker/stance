@@ -18,7 +18,7 @@
 //!   live, an empty frame in a track.
 //! - [`OneEuro`] and [`Butterworth`] smooth keypoint series; filtering is
 //!   derived from a track, never stored in it.
-//! - [`draw`] annotates images: skeletons, lines, discs and text.
+//! - [`draw`] annotates images: skeletons, lines, disks and text.
 //!
 //! The pipeline is generic over [`PoseEngine`] and [`PersonDetector`]:
 //! [`PoseModels::load`] gives the default pair, [`PoseModels::new`] any
@@ -30,11 +30,11 @@
 //! and input size; loading reads `<dir>/<name>.onnx` and verifies the hash.
 //! With the `pose-download` feature, [`fetch_model`] downloads a model over
 //! HTTPS into a cache directory first; [`fetch_model_with`] also reports
-//! its progress and can be cancelled.
+//! its progress and can be canceled.
 //!
-//! | Model | Use | Licence |
+//! | Model | Use | License |
 //! |---|---|---|
-//! | [`RTMPOSE_M_HALPE26`] (default), [`RTMPOSE_S_HALPE26`] | keypoints | Apache-2.0 weights (OpenMMLab), trained on public datasets with mixed licences |
+//! | [`RTMPOSE_M_HALPE26`] (default), [`RTMPOSE_S_HALPE26`] | keypoints | Apache-2.0 weights (OpenMMLab), trained on public datasets with mixed licenses |
 //! | [`YOLOX_TINY`] (default), [`YOLOX_NANO`] | person boxes | Apache-2.0 (Megvii), COCO |
 //!
 //! # Attribution
@@ -102,7 +102,7 @@ use crate::Result;
 
 /// One keypoint in source-image pixels.
 ///
-/// Serialised as `[x, y, score]`.
+/// Serialized as `[x, y, score]`.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 #[serde(from = "[f32; 3]", into = "[f32; 3]")]
 pub struct Keypoint {
@@ -162,7 +162,7 @@ impl Pose {
 
     /// The box around the keypoints scoring at least `min_score` (all of
     /// them when fewer than three do), scaled by `expansion` about its
-    /// centre: where to look for the person in the next frame.
+    /// center: where to look for the person in the next frame.
     #[must_use]
     pub fn keypoint_box(&self, min_score: f32, expansion: f32) -> Option<BBox> {
         let confident = self.keypoints.iter().filter(|k| k.score >= min_score);
@@ -314,7 +314,7 @@ pub struct PoseConfig {
     pub keypoint_threshold: f32,
     /// A pose whose mean score is below this is absent: the live tracker
     /// returns `None` (after one retry) and the clip pass redoes it from a
-    /// neighbouring frame's keypoints, then leaves a gap in the
+    /// neighboring frame's keypoints, then leaves a gap in the
     /// [`PoseTrack`]. Low-score poses are keypoints scattered over the
     /// background, e.g. after the golfer walks out of frame.
     pub min_pose_score: f32,
@@ -467,7 +467,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn keypoints_serialise_as_triples() {
+    fn keypoints_serialize_as_triples() {
         let k = Keypoint {
             x: 1.5,
             y: -2.0,

@@ -140,7 +140,7 @@ pub enum ControlId {
     BacklightCompensation,
     /// Power line frequency (anti-flicker).
     PowerLineFrequency,
-    /// Colour on/off.
+    /// Color on/off.
     ColorEnable,
     /// Zoom.
     Zoom,
@@ -245,7 +245,7 @@ impl ExposureUnit {
 /// Which capture mode to open. MJPEG only.
 ///
 /// Parses from and displays as `auto` or `WIDTHxHEIGHT@FPS` (`1280x720@120`,
-/// `1920x1080@29.97`), and serialises the same way.
+/// `1920x1080@29.97`), and serializes the same way.
 ///
 /// ```
 /// use stance::FormatRequest;

@@ -68,14 +68,14 @@ pub struct FetchProgress {
 /// `progress` is called once when the response starts (`done` 0) and after
 /// every piece of the body read, on the calling thread. `cancel` is checked
 /// before the request and after every piece read; once it is set the fetch
-/// stops, removes its temporary files and returns [`Error::Cancelled`]. A
+/// stops, removes its temporary files and returns [`Error::Canceled`]. A
 /// cancel is noticed between reads, so it can wait for one read (at most the
 /// 60 s read timeout on a stalled connection). A file already verified in
 /// `cache_dir` is returned without calling either.
 ///
 /// # Errors
 ///
-/// As [`fetch_model`], and [`Error::Cancelled`] once `cancel` is set.
+/// As [`fetch_model`], and [`Error::Canceled`] once `cancel` is set.
 pub fn fetch_model_with(
     spec: &ModelSpec,
     cache_dir: &Path,
@@ -86,9 +86,9 @@ pub fn fetch_model_with(
     if spec.read_verified(cache_dir).is_ok() {
         return Ok(path);
     }
-    let cancelled = || cancel.is_some_and(|c| c.load(Ordering::Relaxed));
-    if cancelled() {
-        return Err(Error::Cancelled);
+    let canceled = || cancel.is_some_and(|c| c.load(Ordering::Relaxed));
+    if canceled() {
+        return Err(Error::Canceled);
     }
     let download_err = |message: String| Error::Download {
         url: spec.url.to_owned(),
@@ -123,15 +123,15 @@ pub fn fetch_model_with(
         if let Some(progress) = progress.as_mut() {
             progress(FetchProgress { done, total });
         }
-        !cancelled()
+        !canceled()
     };
     if !report(0) {
-        return Err(Error::Cancelled);
+        return Err(Error::Canceled);
     }
     let downloaded = copy_hashing(&mut body, &mut download, &mut report).map_err(|e| match e {
         Copy::Read(e) => download_err(e.to_string()),
         Copy::Write(e) => Error::io(format!("writing {}", download.path.display()), e),
-        Copy::Cancelled => Error::Cancelled,
+        Copy::Canceled => Error::Canceled,
     })?;
 
     let (onnx, (digest, len)) = match spec.zip_member {
@@ -145,7 +145,7 @@ pub fn fetch_model_with(
                 extract(&mut download.file, member, spec.size, &mut onnx).map_err(|e| match e {
                     Copy::Read(e) => download_err(e.to_string()),
                     Copy::Write(e) => Error::io(format!("writing {}", onnx.path.display()), e),
-                    Copy::Cancelled => Error::Cancelled,
+                    Copy::Canceled => Error::Canceled,
                 })?;
             drop(download);
             (onnx, hashed)
@@ -153,8 +153,8 @@ pub fn fetch_model_with(
         None => (download, downloaded),
     };
     spec.check_sha256(&digest, len)?;
-    if cancelled() {
-        return Err(Error::Cancelled);
+    if canceled() {
+        return Err(Error::Canceled);
     }
     onnx.persist(&path)?;
     Ok(path)
@@ -165,7 +165,7 @@ pub fn fetch_model_with(
 enum Copy {
     Read(io::Error),
     Write(io::Error),
-    Cancelled,
+    Canceled,
 }
 
 /// Copies `from` into `to`, returning the SHA-256 (hex) and length.
@@ -191,7 +191,7 @@ fn copy_hashing(
         to.file.write_all(chunk).map_err(Copy::Write)?;
         len += n as u64;
         if !progress(len) {
-            return Err(Copy::Cancelled);
+            return Err(Copy::Canceled);
         }
     }
     Ok((hex(&hasher.finalize()), len))
@@ -393,16 +393,16 @@ mod tests {
             calls += 1;
             false
         });
-        assert!(matches!(stopped, Err(Copy::Cancelled)));
+        assert!(matches!(stopped, Err(Copy::Canceled)));
         assert_eq!(calls, 1);
         assert!(read_back(&mut t).len() < data.len());
     }
 
     #[test]
-    fn a_cancelled_fetch_stops_before_any_request_and_writes_nothing() {
+    fn a_canceled_fetch_stops_before_any_request_and_writes_nothing() {
         let dir = crate::testutil::TempDir::new("fetch-cancel");
         let spec = ModelSpec {
-            name: "cancelled",
+            name: "canceled",
             url: "https://invalid.example/never-fetched.onnx",
             ..super::super::YOLOX_NANO
         };
@@ -411,7 +411,7 @@ mod tests {
         let mut progress = |_: FetchProgress| calls += 1;
         let e =
             fetch_model_with(&spec, dir.path(), Some(&mut progress), Some(&cancel)).unwrap_err();
-        assert!(matches!(e, Error::Cancelled), "{e}");
+        assert!(matches!(e, Error::Canceled), "{e}");
         assert_eq!(calls, 0);
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
         // A verified file is still returned, without a callback.

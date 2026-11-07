@@ -43,7 +43,7 @@ pub enum ImpactSource {
 ///
 /// - **impact**: the hands bottom out a little before the ball, so impact
 ///   is 25 ms after the hands' low point (sub-frame, a parabola through its
-///   neighbours). Of the low points, the one with the clearest swing
+///   neighbors). Of the low points, the one with the clearest swing
 ///   through it: the smaller of the drop from its top and the rise in the
 ///   follow-through after it (within two downswings, at most 0.6 s), times
 ///   the downswing's peak hand speed over half the clip's peak (at most 1,
@@ -96,7 +96,7 @@ pub enum ImpactSource {
 ///   point, at half the confidence.
 ///
 /// Confidence is the wrists' mean keypoint score (for the top and impact,
-/// the lowest of the frame and its neighbours, so an event beside
+/// the lowest of the frame and its neighbors, so an event beside
 /// interpolated hands carries their halved score), scaled down where the
 /// trajectory is unclear: a top less than 1 L above the address hands, a
 /// downswing (top → impact) outside 120–700 ms (to 0 at 60 ms and 1 s), a
@@ -320,7 +320,7 @@ impl Hands<'_> {
         f64::from(b.score(Joint::LeadWrist) + b.score(Joint::TrailWrist)) / 2.0
     }
 
-    /// The lowest wrist score at a frame and its neighbours: an extremum
+    /// The lowest wrist score at a frame and its neighbors: an extremum
     /// beside interpolated hands is no surer than they are.
     fn wrist_score_near(&self, i: usize) -> f64 {
         (i.saturating_sub(1)..=(i + 1).min(self.len() - 1))
@@ -376,7 +376,7 @@ impl Hands<'_> {
     }
 
     /// The time of the extremum of `y` at frame `i`, refined with a
-    /// parabola through its neighbours (the frame's own time where `i` is
+    /// parabola through its neighbors (the frame's own time where `i` is
     /// not an extremum).
     fn refine(&self, i: usize) -> u64 {
         let t_ns = self.frames.t_ns[i];
@@ -425,7 +425,7 @@ impl Hands<'_> {
     /// its time.
     fn top_before(&self, end: usize) -> Option<(usize, u64)> {
         // Back to the low point when `end` is past it, so the hands still
-        // falling towards it don't end the backswing.
+        // falling toward it don't end the backswing.
         let mut low = end;
         while low > 0
             && self.t[end] - self.t[low - 1] <= IMPACT_SEARCH_S

@@ -59,7 +59,7 @@ pub trait Source {
 
     /// A handle that ends a blocked [`Source::next_frame`] from another
     /// thread, for sources whose reads can outlast their timeout (Media
-    /// Foundation cameras). `None` (the default) for sources that honour the
+    /// Foundation cameras). `None` (the default) for sources that honor the
     /// timeout.
     fn interrupter(&self) -> Option<Interrupter> {
         None

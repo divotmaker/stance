@@ -17,36 +17,36 @@ finish, and are named as such.
 
 ## Bands and fits
 
-A band is a centre and a standard deviation (SD) for one metric at one
+A band is a center and a standard deviation (SD) for one metric at one
 position, for a club class (driver, mid-iron, wedge), a sex and a reference
 (tour, amateur, or the player's own swings).
 
-- **Shape-neutral** bands are `centre ± SD`.
+- **Shape-neutral** bands are `center ± SD`.
 - **Shape-linked** bands are the four quantities at impact where a fade and a
   draw sit a little apart: hip turn, shoulder turn, shoulder tilt and hip
-  sway. Each has a fade band at `centre + offset` and a draw band at
-  `centre − offset`, both `± SD`. The data file marks these rows; no target
+  sway. Each has a fade band at `center + offset` and a draw band at
+  `center − offset`, both `± SD`. The data file marks these rows; no target
   shape is needed to grade them.
 
 A value gets one of five fits:
 
 | Fit | Shape-linked band | Shape-neutral band |
 |---|---|---|
-| `Both` | inside the fade band and the draw band | inside `centre ± SD` |
+| `Both` | inside the fade band and the draw band | inside `center ± SD` |
 | `Fade` | inside the fade band only | — |
 | `Draw` | inside the draw band only | — |
 | `Near` | outside both, within 2 SD of the nearer | within 2 SD |
 | `Far` | further out | further out |
 
 With an offset of 3 and an SD of 5 (the hip turn at impact) the `Both`
-region is `centre ± 2`, `Fade` is `(centre + 2, centre + 8]`, `Draw` is
-`[centre − 8, centre − 2)` and `Near` reaches `centre ± 13`: the span that
+region is `center ± 2`, `Fade` is `(center + 2, center + 8]`, `Draw` is
+`[center − 8, center − 2)` and `Near` reaches `center ± 13`: the span that
 fits one shape or the other is 1.6 SD wide, not 1. The shoulder tilt's
 offset is 3, not 4, so that with its SD of 4.5 the two bands keep a usable
-overlap (`centre ± 1.5`); with 4 it would be `centre ± 0.5`, and keypoint
-noise would push a value on the centre to one shape or the other.
+overlap (`center ± 1.5`); with 4 it would be `center ± 0.5`, and keypoint
+noise would push a value on the center to one shape or the other.
 
-The value's **side** is relative to the neutral centre: `On` inside the
+The value's **side** is relative to the neutral center: `On` inside the
 neutral band (or inside both shape bands), otherwise `Low` or `High`. A
 band with no miss on one side (a finish hip turn can't be too open; a
 downswing can't be too fast) grades a value on that side as `Both`.
@@ -56,15 +56,15 @@ The **words**: `Both` needs none beyond the metric's own direction word.
 read "Hip turn more open than tour: fade or slice pattern when the arms
 lag", the band's direction word for the side and the pattern that miss
 tends to produce (`Grade::fit_word`). The engine returns fits, never
-colours.
+colors.
 
 A turn's words follow its sign. When the value lies between zero and the
-centre, on the centre's side, the words say "less" and the centre's
+center, on the center's side, the words say "less" and the center's
 direction (`Grade::phrase`); otherwise "more" and the side's direction. A
-one-camera turn takes the centre's sign, so it reads less or more of the
-centre's direction:
+one-camera turn takes the center's sign, so it reads less or more of the
+center's direction:
 
-| Driver shoulder turn at impact (tour centre 30° open) | Words |
+| Driver shoulder turn at impact (tour center 30° open) | Words |
 |---|---|
 | 15° open | Shoulder turn less open than tour: shoulders behind, push or hook |
 | 26° open (draw band) | Shoulder turn less open: draw side |
@@ -87,16 +87,16 @@ and exposed as tunable constants (`FADE_OFFSET_HIP_TURN_DEG`,
 
 Bands use stance's signs (`MetricId`):
 
-- Shifts are positive towards the target (face-on), towards the ball (down
+- Shifts are positive toward the target (face-on), toward the ball (down
   the line) or up.
 - Tilts are positive with the lead side higher, so the shoulders are about
   +15° at address, −38° at the top and +25° at impact.
 - Lateral spine tilt is positive with the shoulders away from the target.
-- Forward bend is positive towards the ball; loss of posture is positive
+- Forward bend is positive toward the ball; loss of posture is positive
   when more upright than at address.
 - Sway gap is positive with the chest ahead of the pelvis (it is negative
   through most of the swing).
-- **Turns are signed: positive open** (towards the target), negative closed.
+- **Turns are signed: positive open** (toward the target), negative closed.
   A tour top is about −40° for the hips and −98° for the shoulders; at
   impact the hips are about +38° and the shoulders +30°; at P5 both are
   still closed.
@@ -108,7 +108,7 @@ are mirror-symmetric, so **one table serves both hands**.
 
 One face-on camera measures how far a body line has turned, not which way,
 so `hip_turn` and `shoulder_turn` are unsigned. The engine gives them **the
-sign of the band's centre**. Where the centre is within 2 SD of zero (the
+sign of the band's center**. Where the center is within 2 SD of zero (the
 hips at P5: −11 ± 6) the direction can't be known and the turn is not
 graded. One-camera turns are graded **at impact only**: at the top a single
 camera reads 25–40° low (the far hip or shoulder is hidden and the turn
@@ -121,7 +121,7 @@ reads that much low against these bands, and a top turn that much high.
 ## Distances and the golfer's height
 
 Distance bands are in inches. With the golfer's height (`SwingOptions::
-height_cm`) the report has centimetres and the grade is measured. Without
+height_cm`) the report has centimeters and the grade is measured. Without
 it, the engine assumes 177 cm for a man and 164 cm for a woman (US adult
 means; the tour tables don't publish their populations' heights), scales
 the torso-unit value through the clip's upright torso, and marks the grade
@@ -145,7 +145,7 @@ A metric whose keypoint confidence is below `Context::min_confidence`
 
 ## Where the numbers come from
 
-- **Two sources for one cell:** the centre is their mean and the SD the
+- **Two sources for one cell:** the center is their mean and the SD the
   published one (the larger when both publish one). This gives the hip and
   chest sway at impact. Where one source is a sensor definition and the
   other a 3D model's, one is picked and named.
@@ -153,15 +153,15 @@ A metric whose keypoint confidence is below `Context::min_confidence`
   proxy SD is borrowed from the nearest published spread (GEARS, K-Vest's
   band widths, Severin) and marked `proxy` in the table and on each grade
   (`Grade::proxy_sd`).
-- **Confidence** says how far a centre can be trusted for this measurement:
+- **Confidence** says how far a center can be trusted for this measurement:
   high where several sources agree on a matching definition, low where the
   support is thin or stance's 2D measurement differs from the source's.
-- **Female centres** come from Sportsbox's female tables; elsewhere the male
+- **Female centers** come from Sportsbox's female tables; elsewhere the male
   band is used and flagged.
 
 ## Known limits
 
-1. **Hip sway at the top** is the pelvis centre (about 0 in at a tour top,
+1. **Hip sway at the top** is the pelvis center (about 0 in at a tour top,
    3–5 in at impact), matching stance's hip midpoint. A tailbone sensor sits
    behind the pelvis and swings away from the target as the pelvis turns, so
    it reads several inches more at the top.
@@ -199,21 +199,21 @@ fade and draw sub-bands).
 - `version` is the format version (1); another version is an error.
   `revision` is the data's date.
 - Each row names `metric`, `position`, `club` (or `null`: any), `sex` (or
-  `null`: either), `reference`, `centre`, `sd`, `unit`, optionally
+  `null`: either), `reference`, `center`, `sd`, `unit`, optionally
   `shape_offset`, `sd_source`, `confidence`, `sources` (keys into `sources`),
   `low` and `high` (`direction` and `tends_to`), `grade` (`false`: a
   reference only) and `note`.
 - A row naming a metric, position, club class, sex, reference, unit or
   direction the crate doesn't know is skipped and counted
   (`Norms::skipped`), so a table written for a later version loads; unknown
-  fields are ignored. A known row that is malformed (no centre, an SD that
+  fields are ignored. A known row that is malformed (no center, an SD that
   isn't positive, a unit that doesn't match the metric) is an error.
 
 ## Bands
 
 ### Tour
 
-| Metric | At | Club | Centre (women) | SD | Shape offset | Confidence | Sources | Low: direction, tends to | High: direction, tends to |
+| Metric | At | Club | Center (women) | SD | Shape offset | Confidence | Sources | Low: direction, tends to | High: direction, tends to |
 |---|---|---|---|---|---|---|---|---|---|
 | `hip_turn` | P3 | any | −33° | 6 (proxy) | — | medium | SB | closed: hips over-rotated early in the backswing, sway risk | open: hips lag the arms, arms-only backswing |
 | `hip_turn` | top | driver | −40° (−44) | 5 (proxy) | — | high | SB, KV, SEV | closed: over-turned hips, sway and loss of separation | open: restricted hip turn, arms-only backswing, loss of coil |
@@ -286,7 +286,7 @@ fade and draw sub-bands).
 
 ### Amateur
 
-| Metric | At | Club | Centre (women) | SD | Shape offset | Confidence | Sources | Low: direction, tends to | High: direction, tends to |
+| Metric | At | Club | Center (women) | SD | Shape offset | Confidence | Sources | Low: direction, tends to | High: direction, tends to |
 |---|---|---|---|---|---|---|---|---|---|
 | `hip_turn` | top | driver | −43.8° | 9.9 | — | medium | SEV | closed: over-turned hips, sway and loss of separation | open: restricted hip turn, arms-only backswing, loss of coil |
 | `hip_turn` | top | mid-iron | −41.8° | 10.2 | — | medium | SEV | closed: over-turned hips, sway and loss of separation | open: restricted hip turn, arms-only backswing, loss of coil |

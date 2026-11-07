@@ -26,7 +26,7 @@
 //! know. [`Norms::builtin`] is the built-in band table and
 //! [`Norms::grade_report`] grades a report for a [`Context`]: each value
 //! gets a [`Fit`] (inside the band, or inside the fade and/or draw band of
-//! a shape-linked one, near, far), the side of the centre it is on, and for
+//! a shape-linked one, near, far), the side of the center it is on, and for
 //! a miss the direction word and the pattern it tends to produce.
 //! `docs/NORMS.md` lists the bands and their sources.
 //!
@@ -37,21 +37,21 @@
 //! pass ([`PoseConfig::rotation`](crate::pose::PoseConfig::rotation)). [`Joint`]
 //! names keypoints by role (lead/trail) for a [`Handed`] golfer, so a
 //! left-hander mirrors a right-hander exactly. [`Setup`] says which image
-//! direction is towards the target (face-on: +x for a right-hander) or the
+//! direction is toward the target (face-on: +x for a right-hander) or the
 //! ball (down the line: +x for a right-hander). A mirrored image (a
 //! selfie-style preview) makes a right-hander look left-handed:
-//! [`SwingOptions::mirrored`] and [`unmirror`] analyse it with the golfer's
+//! [`SwingOptions::mirrored`] and [`unmirror`] analyze it with the golfer's
 //! true hand.
 //!
 //! # 2D proxies
 //!
 //! Every metric is measured in one camera's image plane. They are proxies
-//! for coaching feedback, not 3D joint angles: a lean towards or away from
+//! for coaching feedback, not 3D joint angles: a lean toward or away from
 //! the camera is invisible, and rotations show only as foreshortening.
 //! The hip and shoulder turns are estimated from that foreshortening, face-on
 //! only, in one solve with the hip and shoulder tilts. [`MetricId`] defines
 //! each one (formula, view, unit, limits). Distances are fractions of the
-//! golfer's torso length at address, and centimetres when the golfer's
+//! golfer's torso length at address, and centimeters when the golfer's
 //! height is given ([`BodyScale`]).
 //!
 //! # Example

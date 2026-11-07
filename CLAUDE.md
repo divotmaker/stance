@@ -35,14 +35,14 @@ in ML or protocol dependencies.
 | `src/pose/skeleton.rs` | `Skeleton` (Halpe-26 tables: names, bones, left/right pairs, mirror), `Side` |
 | `src/pose/model.rs` | `ModelSpec` table (URL, zip member, SHA-256, size, input), hash verification |
 | `src/pose/runtime.rs` | The inference seam: the only file that uses tract (`Network`, `Session`, `InferencePool`) |
-| `src/pose/rtmpose.rs` | `RtmPose` (crop, normalise, SimCC decode, inverse warp) |
+| `src/pose/rtmpose.rs` | `RtmPose` (crop, normalize, SimCC decode, inverse warp) |
 | `src/pose/yolox.rs` | `Yolox` (letterbox, grid decode, person NMS) |
 | `src/pose/tracker.rs` | `PoseTracker` (single golfer, frames turned by `PoseConfig::rotation`, detect every N frames, IoU identity, One Euro) |
 | `src/pose/clip.rs` | `analyze_clip`/`analyze_frames` (parallel key-frame detection and pose, sequential fix-up, low-score poses dropped), `WorkerHook` (`PoseConfig::on_worker_start`, run first on every worker thread) |
 | `src/pose/track.rs` | `PoseTrack` JSON (`<clip>.pose.json`, `rotation` written only when not 0) |
 | `src/pose/filter.rs` | `OneEuro`, zero-phase `Butterworth` |
-| `src/pose/download.rs` | `pose-download` feature: `fetch_model` / `fetch_model_with` (optional `FetchProgress` callback and cancel flag, `Error::Cancelled`) (ureq, HTTPS only, timeouts, per-process temporary files, zip member extraction) |
-| `src/pose/draw.rs` | `pose::draw`: blended lines and discs, skeletons, the 5×7 label font (used by the examples) |
+| `src/pose/download.rs` | `pose-download` feature: `fetch_model` / `fetch_model_with` (optional `FetchProgress` callback and cancel flag, `Error::Canceled`) (ureq, HTTPS only, timeouts, per-process temporary files, zip member extraction) |
+| `src/pose/draw.rs` | `pose::draw`: blended lines and disks, skeletons, the 5×7 label font (used by the examples) |
 | `src/golf/mod.rs` | `pose` feature: golf swing analysis, module docs and re-exports |
 | `src/golf/body.rs` | `View`, `Handed`, `Joint` (lead/trail over Halpe-26), `Setup` (image directions), 2D geometry |
 | `src/golf/smooth.rs` | `Smoothing`, gap filling and impact-split Butterworth, `smooth_track` |
@@ -120,7 +120,7 @@ There are no default features. The wasm build is
 - `golf` is pure math on keypoints: no models, no I/O beyond its JSON.
   Metrics are 2D, per view, and documented as proxies; lead/trail mapping
   keeps left-handers an exact mirror of right-handers.
-- `golf::norms` returns fits, never colours, and never needs the player's
+- `golf::norms` returns fits, never colors, and never needs the player's
   target shape. Band numbers live in `norms/tour.json`, not in code; public
   docs cite them as published tour averages by source. A change to the
   table updates `docs/NORMS.md`'s tables in the same change.
@@ -135,7 +135,7 @@ There are no default features. The wasm build is
   tests. `#[must_use]` on value-returning functions.
 - Minimal dependencies; justify each in `Cargo.toml` with a comment.
 - Never modify `version` in `Cargo.toml`; release CI bumps it.
-- Comments and docs describe current behaviour only — no history.
+- Comments and docs describe current behavior only — no history.
 
 ## Docs policy
 

@@ -2,21 +2,21 @@
 //! published tour (or amateur) averages, which way it is off, and what that
 //! miss tends to produce.
 //!
-//! A [`Band`] is a centre and a standard deviation for one metric at one
+//! A [`Band`] is a center and a standard deviation for one metric at one
 //! [`Position`], for a [`ClubClass`], a [`Sex`] and a [`Reference`]. Most
-//! bands are **shape-neutral**: one band, `centre ± sd`. Four quantities at
+//! bands are **shape-neutral**: one band, `center ± sd`. Four quantities at
 //! impact are **shape-linked** (hip turn, shoulder turn, shoulder tilt and
-//! hip sway): they carry a fade band at `centre + offset` and a draw band at
-//! `centre − offset`, both `± sd`, because a fade and a draw are both good
+//! hip sway): they carry a fade band at `center + offset` and a draw band at
+//! `center − offset`, both `± sd`, because a fade and a draw are both good
 //! swings and sit a little apart there. The data file, not the caller, says
 //! which bands are shape-linked.
 //!
 //! [`Norms::grade`] places a value: a [`Fit`] ([`Fit::Both`] inside both
 //! sub-bands, or inside a neutral band; [`Fit::Fade`] or [`Fit::Draw`]
 //! inside one; [`Fit::Near`] within 2 SD of the nearer; [`Fit::Far`]
-//! beyond), the [`Side`] of the neutral centre it is on, and for a miss the
+//! beyond), the [`Side`] of the neutral center it is on, and for a miss the
 //! direction word and the pattern it tends to produce ([`Miss`]). The
-//! engine never decides colours and never needs the player's target shape.
+//! engine never decides colors and never needs the player's target shape.
 //!
 //! The built-in table ([`Norms::builtin`]) is a versioned JSON file embedded
 //! in the crate, from published tour averages (Sportsbox AI, GEARS, K-Vest
@@ -26,14 +26,14 @@
 //!
 //! # Values and signs
 //!
-//! Bands use stance's signs ([`MetricId`]): shifts positive towards the
+//! Bands use stance's signs ([`MetricId`]): shifts positive toward the
 //! target, the ball or up; tilts positive with the lead side higher; lateral
 //! spine tilt positive with the shoulders away from the target. Turns are
-//! signed: **positive open** (towards the target), negative closed, so a
+//! signed: **positive open** (toward the target), negative closed, so a
 //! tour top is about −40° for the hips and impact about +38°. One face-on
 //! camera measures a turn's size, not its direction, so a one-camera
-//! `hip_turn` or `shoulder_turn` takes the sign of the band's centre, is not
-//! graded where the centre is within 2 SD of zero, and is graded at impact
+//! `hip_turn` or `shoulder_turn` takes the sign of the band's center, is not
+//! graded where the center is within 2 SD of zero, and is graded at impact
 //! only (at the top it reads 25–40° low). Distances grade in inches: from
 //! [`Metric::cm`] when the golfer's height was given ([`Scale::Measured`]),
 //! otherwise from an assumed height ([`Scale::Assumed`]). Every metric is
@@ -54,17 +54,17 @@ use crate::{Error, Result};
 /// The band-table format version [`Norms::from_json`] reads.
 pub const NORMS_VERSION: u32 = 1;
 
-/// The fade-side centre offset of the hip turn at impact (degrees; the draw
+/// The fade-side center offset of the hip turn at impact (degrees; the draw
 /// side is the negation). The four offsets are inferences, not
 /// measurements: the built-in table carries them on its shape-linked rows.
 pub const FADE_OFFSET_HIP_TURN_DEG: f64 = 3.0;
-/// The fade-side centre offset of the shoulder turn at impact (degrees).
+/// The fade-side center offset of the shoulder turn at impact (degrees).
 pub const FADE_OFFSET_SHOULDER_TURN_DEG: f64 = 3.0;
-/// The fade-side centre offset of the shoulder tilt at impact (degrees):
+/// The fade-side center offset of the shoulder tilt at impact (degrees):
 /// 3, not 4, so with its SD of 4.5 the fade and draw bands overlap by
-/// ±1.5° around the centre rather than ±0.5°.
+/// ±1.5° around the center rather than ±0.5°.
 pub const FADE_OFFSET_SHOULDER_TILT_DEG: f64 = -3.0;
-/// The fade-side centre offset of the hip sway at impact (inches).
+/// The fade-side center offset of the hip sway at impact (inches).
 pub const FADE_OFFSET_HIP_SWAY_IN: f64 = -0.75;
 
 /// The height (cm) inch bands assume for a man when the golfer's height is
@@ -287,7 +287,7 @@ pub enum SdSource {
     Proxy,
 }
 
-/// How far a band's centre can be trusted for this measurement.
+/// How far a band's center can be trusted for this measurement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -308,7 +308,7 @@ pub enum Confidence {
 pub enum NormUnit {
     /// Degrees ([`Unit::Degrees`] metrics).
     Degrees,
-    /// Inches ([`Unit::Torso`] metrics, through centimetres).
+    /// Inches ([`Unit::Torso`] metrics, through centimeters).
     Inches,
     /// A ratio ([`Unit::Ratio`] metrics, tempo).
     Ratio,
@@ -353,7 +353,7 @@ impl Direction {
         }
     }
 
-    /// The phrase for a value short of a centre in this direction ("Shoulder
+    /// The phrase for a value short of a center in this direction ("Shoulder
     /// turn *less open*"): `Some` for the words a signed value reads as
     /// (open, closed), `None` for the positional and magnitude words, whose
     /// [`Direction::phrase`] already reads right on either side of zero.
@@ -408,20 +408,20 @@ impl Miss {
     }
 }
 
-/// A sub-band: `centre ± sd`, in the band's unit.
+/// A sub-band: `center ± sd`, in the band's unit.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Range {
-    /// The centre.
-    pub centre: f64,
+    /// The center.
+    pub center: f64,
     /// The half-width (one SD).
     pub sd: f64,
 }
 
 impl Range {
-    /// The distance of `value` from the centre in SDs, signed.
+    /// The distance of `value` from the center in SDs, signed.
     #[must_use]
     pub fn z(&self, value: f64) -> f64 {
-        (value - self.centre) / self.sd
+        (value - self.center) / self.sd
     }
 }
 
@@ -451,14 +451,14 @@ pub struct Band {
     pub sex: Option<Sex>,
     /// The population.
     pub reference: Reference,
-    /// The neutral band's centre, in [`Band::unit`].
-    pub centre: f64,
+    /// The neutral band's center, in [`Band::unit`].
+    pub center: f64,
     /// The neutral band's half-width (one SD), and each shape sub-band's.
     pub sd: f64,
-    /// The unit of the centre and SD.
+    /// The unit of the center and SD.
     pub unit: NormUnit,
-    /// `Some(o)`: a shape-linked band, the fade sub-band centred at
-    /// `centre + o` and the draw sub-band at `centre − o`, both `± sd`
+    /// `Some(o)`: a shape-linked band, the fade sub-band centered at
+    /// `center + o` and the draw sub-band at `center − o`, both `± sd`
     /// (or the explicit [`Band::fade`] / [`Band::draw`]). `None`:
     /// shape-neutral.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -472,15 +472,15 @@ pub struct Band {
     pub draw: Option<Range>,
     /// Where the SD comes from.
     pub sd_source: SdSource,
-    /// How far the centre can be trusted for this measurement.
+    /// How far the center can be trusted for this measurement.
     pub confidence: Confidence,
     /// Keys into [`Norms::sources`].
     #[serde(default)]
     pub sources: Vec<String>,
-    /// The miss below the centre; `None`: a low value is never a miss.
+    /// The miss below the center; `None`: a low value is never a miss.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub low: Option<Miss>,
-    /// The miss above the centre; `None`: a high value is never a miss.
+    /// The miss above the center; `None`: a high value is never a miss.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub high: Option<Miss>,
     /// Whether values are graded against it. An ungraded band (`"grade":
@@ -501,7 +501,7 @@ impl Band {
         metric: impl Into<Measure>,
         position: Position,
         reference: Reference,
-        centre: f64,
+        center: f64,
         sd: f64,
         unit: NormUnit,
     ) -> Self {
@@ -511,7 +511,7 @@ impl Band {
             club: None,
             sex: None,
             reference,
-            centre,
+            center,
             sd,
             unit,
             shape_offset: None,
@@ -534,7 +534,7 @@ impl Band {
     }
 
     /// The fade and draw sub-bands of a shape-linked band: explicit ones
-    /// when either is set, otherwise `centre ± offset` with the band's SD
+    /// when either is set, otherwise `center ± offset` with the band's SD
     /// (none for a [`Reference::Personal`] band). `(None, None)` for a
     /// shape-neutral band.
     #[must_use]
@@ -548,13 +548,13 @@ impl Band {
         if self.reference == Reference::Personal {
             return (None, None);
         }
-        let at = |centre| {
+        let at = |center| {
             Some(Range {
-                centre,
+                center,
                 sd: self.sd,
             })
         };
-        (at(self.centre + o), at(self.centre - o))
+        (at(self.center + o), at(self.center - o))
     }
 
     fn miss(&self, side: Side) -> Option<&Miss> {
@@ -574,8 +574,8 @@ impl Band {
             )))
         };
         let positive = |sd: f64| sd.is_finite() && sd > 0.0;
-        if !self.centre.is_finite() {
-            return bad("centre is not finite");
+        if !self.center.is_finite() {
+            return bad("center is not finite");
         }
         if !positive(self.sd) {
             return bad("sd is not positive");
@@ -586,7 +586,7 @@ impl Band {
         if [self.fade, self.draw]
             .iter()
             .flatten()
-            .any(|r| !r.centre.is_finite() || !positive(r.sd))
+            .any(|r| !r.center.is_finite() || !positive(r.sd))
         {
             return bad("a sub-band is not finite and positive");
         }
@@ -670,7 +670,7 @@ pub struct Context {
     /// The population to compare with.
     pub reference: Reference,
     /// The body scale, for inch bands against a torso-unit value without
-    /// centimetres: with [`BodyScale::cm_per_px`] the value is measured,
+    /// centimeters: with [`BodyScale::cm_per_px`] the value is measured,
     /// otherwise an assumed height is used. [`Norms::grade_report`] takes
     /// the report's scale when this is `None`.
     pub scale: Option<BodyScale>,
@@ -710,12 +710,12 @@ pub enum Fit {
     Far,
 }
 
-/// Which side of the neutral centre a value is on.
+/// Which side of the neutral center a value is on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Side {
-    /// Below: inside neither band's overlap, under the centre.
+    /// Below: inside neither band's overlap, under the center.
     Low,
     /// Above.
     High,
@@ -749,19 +749,19 @@ pub struct Grade {
     /// The value in the band's unit, signed as the band (a one-camera turn
     /// takes the band's sign).
     pub value: f64,
-    /// The neutral band's centre.
-    pub centre: f64,
+    /// The neutral band's center.
+    pub center: f64,
     /// The neutral band's SD.
     pub sd: f64,
     /// The band's unit.
     pub unit: NormUnit,
-    /// `(value − centre) / sd`.
+    /// `(value − center) / sd`.
     pub z: f64,
     /// Where it sits.
     pub fit: Fit,
-    /// Which side of the neutral centre.
+    /// Which side of the neutral center.
     pub side: Side,
-    /// The direction word of [`Grade::side`] (`None` on the centre, or on
+    /// The direction word of [`Grade::side`] (`None` on the center, or on
     /// a side with no miss).
     pub direction: Option<Direction>,
     /// The side's miss for [`Fit::Near`] and [`Fit::Far`].
@@ -770,9 +770,9 @@ pub struct Grade {
     pub fade: Option<Range>,
     /// The draw sub-band (shape-linked bands).
     pub draw: Option<Range>,
-    /// The distance from the fade sub-band's centre in SDs.
+    /// The distance from the fade sub-band's center in SDs.
     pub z_fade: Option<f64>,
-    /// The distance from the draw sub-band's centre in SDs.
+    /// The distance from the draw sub-band's center in SDs.
     pub z_draw: Option<f64>,
     /// The metric's keypoint confidence ([`Metric::confidence`]; 1 for
     /// tempo).
@@ -800,17 +800,17 @@ impl Grade {
 
     /// The comparative phrase for [`Grade::direction`]: "more open" or
     /// "more closed" ([`Direction::phrase`]), except that a value between
-    /// zero and the centre reads "less" and the centre's own word, so it
+    /// zero and the center reads "less" and the center's own word, so it
     /// never contradicts the value's sign: a 15° open shoulder turn against
-    /// a 30° open centre is "less open", not "more closed". Positional and
+    /// a 30° open center is "less open", not "more closed". Positional and
     /// magnitude words ("further toward the target", "higher", "more")
     /// always use [`Direction::phrase`]. `None` without a direction.
     #[must_use]
     pub fn phrase(&self) -> Option<&'static str> {
         let d = self.direction?;
-        // Strictly between zero and the centre (NaN or infinite for a zero
-        // centre, so never).
-        let r = self.value / self.centre;
+        // Strictly between zero and the center (NaN or infinite for a zero
+        // center, so never).
+        let r = self.value / self.center;
         let short = r > 0.0 && r < 1.0;
         Some(
             short
@@ -826,7 +826,7 @@ impl Grade {
     /// than tour: fade or slice pattern when the arms lag" for
     /// [`Fit::Near`] and [`Fit::Far`]. The comparative is
     /// [`Grade::phrase`]: "Shoulder turn less open than tour: shoulders
-    /// behind, push or hook" for a 15° open turn against a 30° open centre.
+    /// behind, push or hook" for a 15° open turn against a 30° open center.
     #[must_use]
     pub fn fit_word(&self) -> Option<String> {
         let mut s = self.metric.name().to_owned();
@@ -917,7 +917,7 @@ impl Norms {
     ///   "sources": { "SB": "Sportsbox AI tour averages" },
     ///   "bands": [
     ///     { "metric": "hip_turn", "position": "impact", "club": "driver", "sex": "male",
-    ///       "reference": "tour", "centre": 38, "sd": 5, "unit": "degrees", "shape_offset": 3,
+    ///       "reference": "tour", "center": 38, "sd": 5, "unit": "degrees", "shape_offset": 3,
     ///       "sd_source": "proxy", "confidence": "high", "sources": ["SB"],
     ///       "low": { "direction": "closed", "tends_to": "hang-back, flip, hook or push pattern" },
     ///       "high": { "direction": "open", "tends_to": "fade or slice pattern when the arms lag" } }
@@ -934,7 +934,7 @@ impl Norms {
     ///
     /// [`Error::InvalidArgument`] for malformed JSON, a version other than
     /// [`NORMS_VERSION`], or a known row that is malformed (a missing or
-    /// non-finite centre, an SD that isn't positive, a unit that doesn't
+    /// non-finite center, an SD that isn't positive, a unit that doesn't
     /// match the metric).
     pub fn from_json(json: &str) -> Result<Self> {
         #[derive(Deserialize)]
@@ -1068,7 +1068,7 @@ impl Norms {
     }
 
     /// Grades a value of metric `id` at `position`, in `unit` (the metric's
-    /// own), with its value in centimetres for a torso-unit metric when the
+    /// own), with its value in centimeters for a torso-unit metric when the
     /// golfer's height is known, and its keypoint confidence. `None`
     /// (ungraded, the plain number shows) when:
     ///
@@ -1076,9 +1076,9 @@ impl Norms {
     ///   ([`Band::graded`]);
     /// - `confidence` is below [`Context::min_confidence`];
     /// - `unit` isn't the metric's, or an inch band has neither
-    ///   centimetres nor a body scale with [`BodyScale::upright_px`];
+    ///   centimeters nor a body scale with [`BodyScale::upright_px`];
     /// - it is a one-camera `hip_turn` or `shoulder_turn` anywhere but
-    ///   impact, or its band's centre is within 2 SD of zero (the turn's
+    ///   impact, or its band's center is within 2 SD of zero (the turn's
     ///   direction is unknown);
     /// - a shape-linked [`Reference::Personal`] band has neither sub-band.
     #[must_use]
@@ -1214,7 +1214,7 @@ impl Norms {
         if !v.is_finite() {
             return None;
         }
-        let (c, s) = (band.centre, band.sd);
+        let (c, s) = (band.center, band.sd);
         if one_camera_turn {
             if c.abs() < 2.0 * s {
                 return None;
@@ -1267,7 +1267,7 @@ impl Norms {
             metric: input.metric,
             position: input.position,
             value: v,
-            centre: c,
+            center: c,
             sd: s,
             unit: band.unit,
             z,
@@ -1318,10 +1318,10 @@ impl Norms {
     }
 }
 
-fn side_of(v: f64, centre: f64) -> Side {
-    if v > centre {
+fn side_of(v: f64, center: f64) -> Side {
+    if v > center {
         Side::High
-    } else if v < centre {
+    } else if v < center {
         Side::Low
     } else {
         Side::On

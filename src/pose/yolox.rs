@@ -1,7 +1,7 @@
 //! YOLOX person detection with raw head outputs.
 //!
 //! The model takes a letterboxed square image (resized to fit, top left,
-//! padded with grey 114), raw 0–255 BGR values. Its output is one row per
+//! padded with gray 114), raw 0–255 BGR values. Its output is one row per
 //! anchor point on the stride 8, 16 and 32 grids: `cx, cy, log w, log h`
 //! relative to the grid cell, objectness, then 80 COCO class scores. This
 //! module decodes the grid, scores each box as objectness × person score,
@@ -17,7 +17,7 @@ use super::model::ModelSpec;
 use super::runtime::{InferencePool, Network, Session};
 use crate::{Error, Result};
 
-/// Grey used to pad the letterbox.
+/// Gray used to pad the letterbox.
 const PAD: f32 = 114.0;
 /// Grid strides of the YOLOX heads.
 const STRIDES: [usize; 3] = [8, 16, 32];
@@ -204,7 +204,7 @@ mod tests {
         let size = 64; // grids 8×8, 4×4, 2×2
         assert_eq!(anchors(size), 84);
         let mut rows = vec![0.0f32; 84 * COLUMNS];
-        // A person in stride-8 cell (3, 2): centre offset (0.5, 0.5), size e^1·8.
+        // A person in stride-8 cell (3, 2): center offset (0.5, 0.5), size e^1·8.
         let r = &mut rows[(2 * 8 + 3) * COLUMNS..][..COLUMNS];
         r[..6].copy_from_slice(&[0.5, 0.5, 1.0, 1.0, 0.9, 0.8]);
         // A confident car in the first stride-32 cell: not a person.

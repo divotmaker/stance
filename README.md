@@ -231,14 +231,14 @@ single executable with no native libraries, on Windows, Linux and macOS.
   keypoints, falling back to the detector's box when those collapse onto
   part of the body (e.g. only the head scoring at the top of the
   backswing). The golfer is the most confident large person near the frame
-  centre; later detections stay on the same person by box overlap. Once
+  center; later detections stay on the same person by box overlap. Once
   tracking is lost, the next detection picks the golfer afresh, which may
   be someone else if the golfer has left. Optional One Euro smoothing;
   `inference_threads` lets one inference use several cores (one thread pool
   per tracker, shared by its two models) for lower latency.
 - **After the shot:** `analyze_clip` runs a recorded clip on several threads
   (detection on key frames, interpolated boxes, pose on every frame, then a
-  sequential pass that redoes weak frames from their neighbours' keypoints)
+  sequential pass that redoes weak frames from their neighbors' keypoints)
   and returns a `PoseTrack`: raw keypoints per frame on the sidecar's time
   base. `PoseTrack::write_beside` stores it as `<clip>.pose.json`. Decoded
   frames held at once stay under 256 MiB across all workers. `threads` sets
@@ -264,7 +264,7 @@ single executable with no native libraries, on Windows, Linux and macOS.
 
 The image pipeline is a port of [rtmlib](https://github.com/Tau-J/rtmlib)'s
 RTMPose path (Apache-2.0, itself from MMPose and YOLOX; see `NOTICE`): box → crop with 1.25 padding at the model's 3:4
-aspect → bilinear affine warp to 192×256 → mean/std normalisation → SimCC
+aspect → bilinear affine warp to 192×256 → mean/std normalization → SimCC
 argmax → back through the inverse warp. On the test image, keypoints match
 rtmlib's code fed RGB (as the model was trained; stock rtmlib feeds BGR, so
 it differs slightly and systematically) to a mean of 0.1–0.2 px, at most
@@ -284,14 +284,14 @@ all. `fetch_model_with` takes an optional progress callback (bytes read,
 and the total when the server sends one) and an optional cancel flag, which
 stops the download and removes its partial files.
 
-| Name | Model | Size | Licence |
+| Name | Model | Size | License |
 |---|---|---|---|
 | `rtmpose-m-halpe26` (default) | RTMPose-m, Halpe-26, 256×192 | 56 MB | Apache-2.0 |
 | `rtmpose-s-halpe26` | RTMPose-s, Halpe-26, 256×192 | 23 MB | Apache-2.0 |
 | `yolox-tiny` (default) | YOLOX-Tiny, COCO, 416×416 | 20 MB | Apache-2.0 |
 | `yolox-nano` | YOLOX-Nano, COCO, 416×416 | 4 MB | Apache-2.0 |
 
-The RTMPose weights are OpenMMLab's official ONNX exports, labelled
+The RTMPose weights are OpenMMLab's official ONNX exports, labeled
 Apache-2.0; they were trained on public pose datasets (COCO, AI Challenger,
 CrowdPose, MPII, sub-JHMDB, Halpe, PoseTrack18) whose own terms are mixed,
 some research-only. The YOLOX weights are Megvii's release, Apache-2.0,
@@ -333,7 +333,7 @@ swaps per clip. `pose_render` writes the clip with the skeleton drawn on it
 (the person's left side cyan, right orange; faint where the score is low),
 its `.pose.json`, and stills at the impact frame.
 
-Both draw with `stance::pose::draw`: blended lines and discs, a skeleton
+Both draw with `stance::pose::draw`: blended lines and disks, a skeleton
 and a 5×7 pixel font for labels, in pure Rust, for any application that
 wants to annotate frames.
 
@@ -385,10 +385,10 @@ keypoints (no models), behind the same `pose` feature.
 
 | Metric | View | Positions | Positive means |
 |---|---|---|---|
-| hip sway | face-on | P3, top, P5, impact | pelvis moved towards the target |
-| chest sway | face-on | P3, top, P5, impact | shoulders' midpoint moved towards the target |
-| sway gap | face-on | address, P3, top, P5, impact | shoulders ahead of the pelvis towards the target (typically negative at the top and impact) |
-| head shift (lateral) | face-on | P3, top, P5, impact | head moved towards the target |
+| hip sway | face-on | P3, top, P5, impact | pelvis moved toward the target |
+| chest sway | face-on | P3, top, P5, impact | shoulders' midpoint moved toward the target |
+| sway gap | face-on | address, P3, top, P5, impact | shoulders ahead of the pelvis toward the target (typically negative at the top and impact) |
+| head shift (lateral) | face-on | P3, top, P5, impact | head moved toward the target |
 | head shift (vertical) | either | top, impact | head rose |
 | pelvis lift | either | top, impact | pelvis rose (it typically drops at the top and rises into impact) |
 | lateral spine tilt | face-on | address, P3, top, P5, impact, finish | shoulders tilted away from the target; at the finish, the bend back |
@@ -398,9 +398,9 @@ keypoints (no models), behind the same `pose` feature.
 | stance width | face-on | address | ankle width / shoulder width |
 | hip width proxy | face-on | top, impact, finish | hip width / its address width (a pelvis-turn proxy; absent above 1) |
 | hip turn, shoulder turn | face-on | P3, top, P5, impact | turned from square (unsigned estimates) |
-| spine forward bend | down the line | address, P3, top, P5, impact | spine leaning towards the ball |
+| spine forward bend | down the line | address, P3, top, P5, impact | spine leaning toward the ball |
 | loss of posture | down the line | P3, top, P5, impact | more upright than at address |
-| early extension | down the line | P3, top, P5, impact | pelvis moved towards the ball |
+| early extension | down the line | P3, top, P5, impact | pelvis moved toward the ball |
 | lead and trail knee flex | down the line | address, top, impact, finish | degrees of bend (0 = straight) |
 | trail-elbow angle | down the line | address, top, impact | degrees at the elbow |
 | hand height | down the line | top | hands above the trail shoulder |
@@ -418,14 +418,14 @@ keypoints (no models), behind the same `pose` feature.
   from published tour and amateur averages, for a club class, sex and
   reference (`Norms::builtin().grade_report(&report, &ctx)`). Each value
   gets a fit (inside the band; inside the fade and/or draw band of the four
-  shape-linked quantities at impact; near; far), its side of the centre,
+  shape-linked quantities at impact; near; far), its side of the center,
   and for a miss the direction word and the pattern it tends to produce.
   One-camera turns take the band's sign and are graded at impact only. The
   table is a versioned JSON file in the crate; `docs/NORMS.md` lists every
   band with its sources, signs and limits.
 
 All metrics are **2D proxies** measured in one camera's image plane, not 3D
-joint angles: motion towards or away from the camera is invisible, and
+joint angles: motion toward or away from the camera is invisible, and
 rotations only show as foreshortening.
 **Hip and shoulder tilt and turn** come from one solve per body line (hip
 to hip, shoulder to shoulder): a line of length `w₀` at address, tilted by
@@ -438,7 +438,7 @@ and frame; where a line shows longer than at address, it has no turn and
 its tilt is its plain angle from horizontal.
 For a distant camera φ is the line's true angle to the horizontal (the
 lead shoulder dropping as the bent-over golfer turns is part of it). What
-limits it: perspective (for a centred golfer and a 55° lens, a 45° hip
+limits it: perspective (for a centered golfer and a 55° lens, a 45° hip
 turn reads about 1° high at 2 m and 0.5° at 5 m, the hip sway is off by
 under 1 cm at 2 m, and a body off the camera's axis by `x` at distance
 `D` reads turned by about `x / D` radians); keypoint drift as the far hip
@@ -452,11 +452,11 @@ the top reads less lead-side-down than published tour averages on real
 swings, so it is beta. X-factor and the kinematic sequence need two
 calibrated views and are not reported.
 Distances are fractions of the golfer's torso length at address, and
-centimetres when the golfer's height is given. Face-on, the forward bend
+centimeters when the golfer's height is given. Face-on, the forward bend
 foreshortens the torso (by about 0.82 at 35°), so face-on fractions read
-about 20 % larger than down the line; centimetres are unaffected. The
+about 20 % larger than down the line; centimeters are unaffected. The
 lateral shifts face-on (hip sway: the pelvis, chest sway: the shoulders,
-head shift: the head, all from address) are positive towards the target
+head shift: the head, all from address) are positive toward the target
 and negative away from it.
 The rustdoc of `MetricId` gives every formula.
 

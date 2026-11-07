@@ -56,7 +56,7 @@ fn posture_from_real_keypoints_mirrors() {
     let pose = tracker.track(&golfer(), 0).unwrap().expect("a golfer");
     let left = posture(&pose, View::DownTheLine, Handed::Left);
     let bend = left.spine_angle.expect("spine visible");
-    // Bent towards the ball (the image's left), as golfers are.
+    // Bent toward the ball (the image's left), as golfers are.
     assert!((10.0..60.0).contains(&bend), "forward bend {bend}");
     assert!(left.lead_knee_flex.is_some() && left.trail_knee_flex.is_some());
     assert!(left.torso_px.is_some_and(|t| t > 50.0));

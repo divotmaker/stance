@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Skeleton {
-    /// Halpe-26: the 17 COCO body points plus head top, neck, hip centre and
+    /// Halpe-26: the 17 COCO body points plus head top, neck, hip center and
     /// big toe, small toe and heel on each foot.
     Halpe26,
 }
@@ -22,7 +22,7 @@ pub enum Side {
     Left,
     /// The person's right.
     Right,
-    /// On the midline (nose, head, neck, hip centre).
+    /// On the midline (nose, head, neck, hip center).
     Center,
 }
 
@@ -204,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn serialises_by_name() {
+    fn serializes_by_name() {
         assert_eq!(
             serde_json::to_string(&Skeleton::Halpe26).unwrap(),
             "\"halpe26\""

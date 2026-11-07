@@ -1,7 +1,7 @@
 //! The inference runtime seam.
 //!
 //! This is the only file that talks to the ONNX runtime (`tract`). The rest
-//! of the pose code sees a [`Network`] (a loaded, optimised model shared
+//! of the pose code sees a [`Network`] (a loaded, optimized model shared
 //! between threads) and [`Session`]s (one per thread, holding the mutable run
 //! state), with plain `f32` tensors in and out, and an [`InferencePool`]
 //! (the threads one inference may use). Another runtime slots in behind the
@@ -33,7 +33,7 @@ pub(crate) struct Network {
 }
 
 impl Network {
-    /// Parses and optimises an ONNX model for a fixed input shape.
+    /// Parses and optimizes an ONNX model for a fixed input shape.
     ///
     /// Shape annotations inside the graph (`value_info`, output shapes) are
     /// ignored: the mmdeploy exports carry a symbolic batch size there that

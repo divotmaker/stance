@@ -41,7 +41,7 @@ impl BBox {
         self.width() * self.height()
     }
 
-    /// Centre point.
+    /// Center point.
     #[must_use]
     pub fn center(&self) -> (f32, f32) {
         ((self.x1 + self.x2) * 0.5, (self.y1 + self.y2) * 0.5)
@@ -65,7 +65,7 @@ impl BBox {
         }
     }
 
-    /// The box scaled about its centre by `factor`.
+    /// The box scaled about its center by `factor`.
     #[must_use]
     pub fn expand(&self, factor: f32) -> BBox {
         let (cx, cy) = self.center();
@@ -155,7 +155,7 @@ impl Affine {
     }
 }
 
-/// The crop a top-down pose model sees for a box: centre and size in image
+/// The crop a top-down pose model sees for a box: center and size in image
 /// pixels, with the size padded and widened or heightened to the model's
 /// aspect ratio.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -187,7 +187,7 @@ impl Crop {
     }
 
     /// Image → crop pixels for an `input_w × input_h` model (no rotation):
-    /// the crop's centre lands on the model input's centre, its width on the
+    /// the crop's center lands on the model input's center, its width on the
     /// input's width.
     pub(crate) fn input_transform(&self, input_w: u32, input_h: u32) -> Affine {
         let k = if self.scale.0 > 0.0 {
@@ -255,7 +255,7 @@ mod tests {
             let (x2, y2) = back.apply(u, v);
             assert!((x - x2).abs() < 1e-9 && (y - y2).abs() < 1e-9);
         }
-        // The box centre maps to the input centre, and the padded crop spans
+        // The box center maps to the input center, and the padded crop spans
         // the input.
         let (u, v) = to.apply(crop.center.0, crop.center.1);
         assert!((u - 96.0).abs() < 1e-9 && (v - 128.0).abs() < 1e-9);

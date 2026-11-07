@@ -173,7 +173,7 @@ impl AviWriter {
         h.extend_from_slice(&24u16.to_le_bytes()); // bit count
         h.extend_from_slice(&p.fourcc);
         put_u32(&mut h, image_size);
-        h.extend_from_slice(&[0; 16]); // pels/meter x/y, colours used/important
+        h.extend_from_slice(&[0; 16]); // pels/meter x/y, colors used/important
         h.extend_from_slice(b"LIST");
         put_u32(&mut h, 0); // patched
         h.extend_from_slice(b"movi");

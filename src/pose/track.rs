@@ -127,11 +127,11 @@ impl PoseTrack {
         clip_avi.with_file_name(format!("{stem}.pose.json"))
     }
 
-    /// Serialises the track.
+    /// Serializes the track.
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidArgument`] if serialisation fails (a non-finite
+    /// [`Error::InvalidArgument`] if serialization fails (a non-finite
     /// number).
     pub fn to_json(&self) -> Result<String> {
         serde_json::to_string(self).map_err(|e| Error::InvalidArgument(format!("pose track: {e}")))

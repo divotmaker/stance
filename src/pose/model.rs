@@ -46,7 +46,7 @@ pub struct ModelSpec {
     pub input_width: u32,
     /// Model input height in pixels.
     pub input_height: u32,
-    /// Licence of the weights.
+    /// License of the weights.
     pub license: &'static str,
 }
 

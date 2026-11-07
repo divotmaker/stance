@@ -29,7 +29,7 @@ pub struct TestPatternConfig {
     /// Deliver frames in real time (`true`), or as fast as they are asked for
     /// with timestamps spaced as if they were (`false`, for tests).
     pub paced: bool,
-    /// Stop after this many frames ([`Error::Ended`] afterwards).
+    /// Stop after this many frames ([`Error::Ended`] afterward).
     pub frames: Option<u64>,
     /// Host time of frame 0 (default: when the source is created).
     pub origin_ns: Option<u64>,
@@ -444,7 +444,7 @@ mod tests {
     }
 
     #[test]
-    fn paced_patterns_honour_the_timeout() {
+    fn paced_patterns_honor_the_timeout() {
         let cfg = TestPatternConfig {
             paced: true,
             fps: 1,

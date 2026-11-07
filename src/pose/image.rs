@@ -162,7 +162,7 @@ pub enum Rotation {
     Cw90,
     /// A half turn.
     Half,
-    /// A quarter turn anticlockwise: the frame's right edge becomes its
+    /// A quarter turn counterclockwise: the frame's right edge becomes its
     /// top.
     Ccw90,
 }
@@ -219,7 +219,7 @@ impl Rotation {
     }
 
     /// Where the point `(x, y)` of a `width × height` frame lands in the
-    /// turned frame (pixel centres at integer coordinates, as keypoints
+    /// turned frame (pixel centers at integer coordinates, as keypoints
     /// are).
     #[cfg(test)]
     pub(crate) fn point(self, x: f64, y: f64, width: u32, height: u32) -> (f64, f64) {
@@ -398,7 +398,7 @@ impl ChannelOrder {
     }
 }
 
-/// Per-channel normalisation `(v − mean) / std`, in tensor plane order.
+/// Per-channel normalization `(v − mean) / std`, in tensor plane order.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Normalize {
     pub(crate) mean: [f32; 3],
@@ -416,10 +416,10 @@ impl Normalize {
 
 /// Warps the image through `to_crop` (image → crop pixels) into an NCHW
 /// float tensor of `width × height`, bilinear, with zero outside the image,
-/// then normalises.
+/// then normalizes.
 ///
 /// Matches OpenCV's `warpAffine(INTER_LINEAR, BORDER_CONSTANT 0)`: crop pixel
-/// `(u, v)` samples the image at `to_crop⁻¹(u, v)`, pixel centres at integer
+/// `(u, v)` samples the image at `to_crop⁻¹(u, v)`, pixel centers at integer
 /// coordinates.
 pub(crate) fn warp_to_tensor(
     image: &Image,
@@ -474,7 +474,7 @@ fn bilinear(image: &Image, x: f64, y: f64) -> [f32; 3] {
     px
 }
 
-/// Resizes the image by `scale` (bilinear, half-pixel centres, edges
+/// Resizes the image by `scale` (bilinear, half-pixel centers, edges
 /// clamped, as OpenCV's `resize(INTER_LINEAR)`), places it at the top left
 /// of a `size × size` canvas filled with `pad`, and returns it as an NCHW
 /// float tensor (raw 0–255 values) with the scale used.
@@ -588,7 +588,7 @@ mod tests {
     }
 
     #[test]
-    fn bgr_order_swaps_planes_and_normalises() {
+    fn bgr_order_swaps_planes_and_normalizes() {
         let img = Image::new(1, 1, vec![10, 20, 30]).unwrap();
         let norm = Normalize {
             mean: [1.0, 2.0, 3.0],

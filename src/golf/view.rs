@@ -27,7 +27,7 @@ const VIEW_FEATURES: [(Joint, Joint, f64, f64); 3] = [
     (Joint::LeadAnkle, Joint::TrailAnkle, 0.35, 1.0),
 ];
 
-/// Down the line, the spine leans towards the ball by about 30–45°;
+/// Down the line, the spine leans toward the ball by about 30–45°;
 /// face-on it tilts sideways by 15° or less. Degrees that separate them.
 const VIEW_SPINE_DEG: f64 = 22.0;
 
@@ -41,7 +41,7 @@ const HANDED_MIN_TOP_CONFIDENCE: f32 = 0.5;
 ///
 /// Face-on, the shoulders, hips and ankles are spread across the image (the
 /// shoulders about one torso length apart) and the spine is near vertical.
-/// Down the line, they overlap and the spine leans 30–45° towards the ball.
+/// Down the line, they overlap and the spine leans 30–45° toward the ball.
 /// Each of the four cues votes by how far it is from the value that
 /// separates the views, scaled to ±1; the confidence is the size of the
 /// mean vote. `None` when the shoulders and hips aren't visible, or the
@@ -80,7 +80,7 @@ pub(crate) fn guess_view_body(body: &Body) -> Option<Guess<View>> {
     })
 }
 
-/// Down the line, a right-hander leans towards +x at address; face-on, a
+/// Down the line, a right-hander leans toward +x at address; face-on, a
 /// right-hander's hands are on the −x (trail) side of the pelvis at the
 /// top. Degrees of lean, and torso lengths of hand offset, for full
 /// confidence.
@@ -88,7 +88,7 @@ const HANDED_LEAN_DEG: f64 = 20.0;
 const HANDED_HANDS_TORSO: f64 = 0.5;
 
 /// Guesses handedness from the address and top poses for a known view: down
-/// the line from which way the spine leans (towards the ball), face-on from
+/// the line from which way the spine leans (toward the ball), face-on from
 /// which side of the pelvis the hands are at the top (the trail side; only
 /// for a top with confidence 0.5 or more). A mirrored camera image makes a
 /// right-hander look left-handed.

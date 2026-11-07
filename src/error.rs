@@ -107,8 +107,8 @@ pub enum Error {
     /// A model download was stopped through its cancel flag
     /// (`pose-download` feature).
     #[cfg(feature = "pose-download")]
-    #[error("download cancelled")]
-    Cancelled,
+    #[error("download canceled")]
+    Canceled,
 }
 
 /// `Result` with this crate's [`Error`].
