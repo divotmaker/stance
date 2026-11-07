@@ -15,27 +15,35 @@ use super::smooth::Frames;
 /// target face-on, towards the ball down the line ([`Setup::forward_x`]).
 /// `L` is the torso length (pelvis to shoulders) at address in pixels:
 /// distances are fractions of it ([`Unit::Torso`]) and, given the golfer's
-/// height, centimetres. Shifts are measured from address.
+/// height, centimetres. Shifts are measured from address. *P3* and *P5*
+/// are the lead arm parallel to the ground in the backswing and the
+/// downswing ([`SwingEvents::arm_parallel_back`](super::SwingEvents::arm_parallel_back),
+/// [`SwingEvents::arm_parallel_down`](super::SwingEvents::arm_parallel_down)).
 ///
 /// | Metric | View | Unit | Positions | Formula |
 /// |---|---|---|---|---|
-/// | `hip_sway` | face-on | torso | top, impact | pelvis shift towards the target (negative: away from it): `fwd·(pelvis.x − pelvis₀.x) / L` |
-/// | `head_lateral` | face-on | torso | top, impact | head shift towards the target: `fwd·(head.x − head₀.x) / L` |
+/// | `hip_sway` | face-on | torso | P3, top, P5, impact | pelvis shift towards the target (negative: away from it): `fwd·(pelvis.x − pelvis₀.x) / L` |
+/// | `chest_sway` | face-on | torso | P3, top, P5, impact | shoulders' shift towards the target (negative: away from it): `fwd·(shoulders.x − shoulders₀.x) / L` |
+/// | `sway_gap` | face-on | torso | address, P3, top, P5, impact | shoulders ahead of the pelvis towards the target: `fwd·(shoulders.x − pelvis.x) / L`; negative with the chest behind the pelvis, as at the top and impact of most full swings |
+/// | `head_lateral` | face-on | torso | P3, top, P5, impact | head shift towards the target: `fwd·(head.x − head₀.x) / L` |
 /// | `head_vertical` | either | torso | top, impact | head rise: `(head₀.y − head.y) / L` |
-/// | `lateral_spine_tilt` | face-on | deg | address, top, impact | spine from vertical, positive with the shoulders away from the target |
-/// | `shoulder_tilt` | face-on | deg | address, impact | shoulder line from horizontal, positive with the lead shoulder higher (at the top and finish the shoulders turn end-on and the line is foreshortening, not tilt) |
+/// | `pelvis_lift` | either | torso | top, impact | pelvis rise (negative: it dropped): `(pelvis₀.y − pelvis.y) / L` |
+/// | `lateral_spine_tilt` | face-on | deg | address, P3, top, P5, impact, finish | spine from vertical, positive with the shoulders away from the target; at the finish, where the golfer faces the target and the camera sees them side-on, it is the bend back (the "reverse C") |
+/// | `shoulder_tilt` | face-on | deg | address, top, impact | shoulder-line tilt φ from the line solve below, positive with the lead shoulder higher (so negative at the top); at address, the line's angle from horizontal. The top value is beta (see the limits below) |
+/// | `hip_tilt` | face-on | deg | address, top, impact | hip-line tilt φ from the line solve below, positive with the lead hip higher; at address, the line's angle from horizontal |
 /// | `lead_arm_angle` | face-on | deg | address, top, impact | lead shoulder–elbow–wrist angle (180 = straight) |
 /// | `stance_width` | face-on | ratio | address | ankle-to-ankle distance / shoulder-to-shoulder distance |
-/// | `hip_width_proxy` | face-on | ratio | top, impact, finish | hip-to-hip distance / its address value: a pelvis-turn proxy, ≈ cos of the turn only if the hips are square to the camera at address and the hip keypoints stay on the pelvis edges; absent when above 1 (not measurable: a turn can't widen the hips) |
-/// | `hip_turn` | face-on | deg | top, impact | pelvis-turn estimate: `acos(w / w₀)` of the hip-to-hip distance `w` against address; absent when `w / w₀` is above 1 |
-/// | `shoulder_turn` | face-on | deg | top, impact | shoulder-turn estimate: `acos(w / w₀)` of the shoulder-to-shoulder distance against address; absent when the ratio is above 1 |
-/// | `spine_forward_bend` | down the line | deg | address, top, impact | spine from vertical, positive leaning towards the ball |
-/// | `loss_of_posture` | down the line | deg | top, impact | `spine_forward_bend` at address minus now: positive = more upright |
-/// | `early_extension` | down the line | torso | top, impact | pelvis shift towards the ball: `fwd·(pelvis.x − pelvis₀.x) / L` |
+/// | `hip_width_proxy` | face-on | ratio | top, impact, finish | hip-to-hip distance / its address value: a pelvis-turn proxy, ≈ cos of the turn only if the hips are square to the camera at address, level, and the hip keypoints stay on the pelvis edges; absent when above 1 (not measurable: a turn can't widen the hips) |
+/// | `hip_turn` | face-on | deg | P3, top, P5, impact | pelvis-turn estimate θ from the line solve below on the hip line |
+/// | `shoulder_turn` | face-on | deg | P3, top, P5, impact | shoulder-turn estimate θ from the line solve below on the shoulder line |
+/// | `spine_forward_bend` | down the line | deg | address, P3, top, P5, impact | spine from vertical, positive leaning towards the ball |
+/// | `loss_of_posture` | down the line | deg | P3, top, P5, impact | `spine_forward_bend` at address minus now: positive = more upright |
+/// | `early_extension` | down the line | torso | P3, top, P5, impact | pelvis shift towards the ball: `fwd·(pelvis.x − pelvis₀.x) / L` |
 /// | `lead_knee_flex` | down the line | deg | address, top, impact, finish | 180 − lead hip–knee–ankle angle (0 = straight) |
 /// | `trail_knee_flex` | down the line | deg | address, top, impact, finish | 180 − trail hip–knee–ankle angle |
 /// | `trail_elbow_angle` | down the line | deg | address, top, impact | trail shoulder–elbow–wrist angle |
 /// | `hand_height` | down the line | torso | top | hands above the trail shoulder: `(trail_shoulder.y − hands.y) / L` |
+/// | `hand_depth` | down the line | torso | top | hands behind the trail shoulder, away from the ball (negative: nearer the ball than it): `−fwd·(hands.x − trail_shoulder.x) / L` |
 ///
 /// Face-on, the golfer bends towards the camera, so `L` is foreshortened
 /// by the cosine of the forward bend (about 0.82 for a typical 35° bend)
@@ -45,36 +53,89 @@ use super::smooth::Frames;
 /// keypoints at address too. Values are rounded to 4 decimal places of
 /// their unit.
 ///
-/// `hip_turn` and `shoulder_turn` are one-camera estimates: a body segment
-/// square to the camera at address that turns by θ about the vertical shows
-/// `cos θ` of its width. They assume the hips and shoulders are square to
-/// the camera at address (any angle there is read as part of the turn), a
-/// vertical image plane, and the golfer staying at the same distance from
-/// the camera. They can't tell which way the body turned, so a turn back
-/// past square reads as a turn. Foreshortening and keypoint drift grow
-/// with the turn (the far hip or shoulder is hidden and the model places
-/// it). A body seen end-on still shows its depth, and with the golfer bent
-/// forwards a turning shoulder line partly tilts in the image instead of
-/// shortening, so large turns read low. They saturate towards 90°, where `acos` is steep and a few pixels
-/// move them by many degrees, and a turn past 90° reads as less (which is
-/// why neither is reported at the finish). X-factor (shoulder minus hip
-/// turn) and the kinematic sequence need 3D (two calibrated views) and are
-/// not measured.
+/// # The line solve: tilt and turn from one camera
+///
+/// `hip_tilt`, `hip_turn`, `shoulder_tilt` and `shoulder_turn` come from
+/// one solve per body line (hip to hip, shoulder to shoulder). A line of
+/// true length `w₀`, tilted by φ (lead end higher) and turned by θ about
+/// the vertical, shows face-on as `dx = w₀ cos φ cos θ` across and
+/// `dy = w₀ sin φ` up, so
+///
+/// ```text
+/// φ = asin(dy / w₀)
+/// θ = acos(dx / (w₀ cos φ))
+/// ```
+///
+/// with `w₀` the line's length at address (where it is taken as square to
+/// the camera, so θ = 0 and φ is the line's angle from horizontal). Where
+/// the line shows longer than `w₀` (`hypot(dx, dy) > w₀`: keypoint noise,
+/// a body that wasn't square at address, a golfer nearer the camera) the
+/// turn is absent and the tilt is the line's angle from horizontal, as for
+/// a square line (the two meet where the line shows exactly `w₀`). Without
+/// an address, the frame's own line stands in for it: the tilt is then the
+/// line's angle from horizontal and there is no turn. The solve runs at
+/// every key position and every frame, address and impact included, so a
+/// tilt is reported wherever both keypoints of its line are found.
+///
+/// For any line of length `w₀` at elevation φ and azimuth θ, a face-on
+/// camera far away sees exactly `dx = w₀ cos φ cos θ` and `dy = w₀ sin φ`,
+/// so the solve's φ is the line's true angle to the horizontal: what a
+/// sensor's tilt or a 3D model's side bend reports. The lead shoulder
+/// dropping as the bent-over golfer turns is part of that angle, not an
+/// error of the solve. What does limit it, in order:
+///
+/// 1. **Perspective.** The solve assumes a distant camera. For a golfer
+///    centred in the picture of a 55° lens at chest height, a 45° hip turn
+///    reads about 0.5° high at 5 m and 1° high at 2 m (a portrait camera in
+///    a small room), the pelvis midpoint drifts with the turn by under 1 cm
+///    at 2 m (0.3 cm at 5 m), and a −40° shoulder tilt at the top reads
+///    about 2° less at 5 m and 5° less at 2 m. A body off the camera's axis
+///    by `x` at distance `D` is seen turned by about `x / D` radians, so a
+///    10 cm slide at 2 m moves a turn by about 3°.
+/// 2. **Keypoint drift and saturation.** The far hip or shoulder is hidden
+///    as the body turns and the model places it, and near 90° `acos` is
+///    steep, so a few pixels move the turn by many degrees; a turn past 90°
+///    reads as less, which is why neither turn is reported at the finish.
+///    On real swings the shoulder tilt at the top reads less lead-side-down
+///    than published tour averages (the hidden trail shoulder, and item 1
+///    up close): treat it as beta.
+/// 3. **Camera roll.** Not modelled: a camera rolled by 2° adds 2° to every
+///    tilt, address included. Level the camera; a non-zero address
+///    shoulder tilt where you expect level is roll.
+/// 4. **The address is taken as square and level in the image plane.**
+///    Hips or shoulders 10° open at address make `w₀` 1.5 % short, so the
+///    turn reads about 0 for small turns and up to about 10° low later.
+/// 5. **Depth and direction.** A line seen end-on still shows the body's
+///    thickness, the golfer is assumed to stay at the same distance, and
+///    one camera can't tell which way the line turned: a turn back past
+///    square reads as a turn.
+///
+/// X-factor (shoulder minus hip turn) and the kinematic sequence need 3D
+/// (two calibrated views) and are not measured.
+///
+/// [`norms`](super::norms) grades the metrics against published tour and
+/// amateur averages. Its turns are signed (positive open), so a one-camera
+/// `hip_turn` or `shoulder_turn`, an unsigned size, takes the sign of the
+/// band's centre and is graded at impact only.
 ///
 /// [`SwingReport::series`](super::SwingReport::series) holds every
 /// measured metric's value at every frame, with the same formulas and
-/// keypoints; shifts and the turns are against the address frame there
-/// too.
+/// keypoints; shifts, the line solve and the turns are against the address
+/// frame there too.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 #[allow(missing_docs, reason = "documented in the table above")]
 pub enum MetricId {
     HipSway,
+    ChestSway,
+    SwayGap,
     HeadLateral,
     HeadVertical,
+    PelvisLift,
     LateralSpineTilt,
     ShoulderTilt,
+    HipTilt,
     LeadArmAngle,
     StanceWidth,
     HipWidthProxy,
@@ -87,6 +148,7 @@ pub enum MetricId {
     TrailKneeFlex,
     TrailElbowAngle,
     HandHeight,
+    HandDepth,
 }
 
 /// A metric's unit.
@@ -106,10 +168,14 @@ impl MetricId {
     /// Every metric.
     pub const ALL: &'static [Self] = &[
         Self::HipSway,
+        Self::ChestSway,
+        Self::SwayGap,
         Self::HeadLateral,
         Self::HeadVertical,
+        Self::PelvisLift,
         Self::LateralSpineTilt,
         Self::ShoulderTilt,
+        Self::HipTilt,
         Self::LeadArmAngle,
         Self::StanceWidth,
         Self::HipWidthProxy,
@@ -122,17 +188,21 @@ impl MetricId {
         Self::TrailKneeFlex,
         Self::TrailElbowAngle,
         Self::HandHeight,
+        Self::HandDepth,
     ];
 
     /// The view the metric needs (`None`: either).
     #[must_use]
     pub fn view(self) -> Option<View> {
         match self {
-            Self::HeadVertical => None,
+            Self::HeadVertical | Self::PelvisLift => None,
             Self::HipSway
+            | Self::ChestSway
+            | Self::SwayGap
             | Self::HeadLateral
             | Self::LateralSpineTilt
             | Self::ShoulderTilt
+            | Self::HipTilt
             | Self::LeadArmAngle
             | Self::StanceWidth
             | Self::HipWidthProxy
@@ -144,7 +214,8 @@ impl MetricId {
             | Self::LeadKneeFlex
             | Self::TrailKneeFlex
             | Self::TrailElbowAngle
-            | Self::HandHeight => Some(View::DownTheLine),
+            | Self::HandHeight
+            | Self::HandDepth => Some(View::DownTheLine),
         }
     }
 
@@ -153,13 +224,18 @@ impl MetricId {
     pub fn unit(self) -> Unit {
         match self {
             Self::HipSway
+            | Self::ChestSway
+            | Self::SwayGap
             | Self::HeadLateral
             | Self::HeadVertical
+            | Self::PelvisLift
             | Self::EarlyExtension
-            | Self::HandHeight => Unit::Torso,
+            | Self::HandHeight
+            | Self::HandDepth => Unit::Torso,
             Self::StanceWidth | Self::HipWidthProxy => Unit::Ratio,
             Self::LateralSpineTilt
             | Self::ShoulderTilt
+            | Self::HipTilt
             | Self::LeadArmAngle
             | Self::HipTurn
             | Self::ShoulderTurn
@@ -176,6 +252,13 @@ impl MetricId {
     pub fn applies_to(self, view: View) -> bool {
         self.view().is_none_or(|v| v == view)
     }
+
+    /// The metric whose bands ([`norms`](super::norms)) grade this one:
+    /// every metric grades against its own rows.
+    #[must_use]
+    pub const fn band_key(self) -> Self {
+        self
+    }
 }
 
 /// A metric's value at each key position (absent where it doesn't apply or
@@ -186,8 +269,16 @@ impl MetricId {
 pub struct Positions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub address: Option<f64>,
+    /// P3: the lead arm parallel to the ground in the backswing
+    /// ([`SwingEvents::arm_parallel_back`](super::SwingEvents::arm_parallel_back)).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arm_parallel_back: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top: Option<f64>,
+    /// P5: the lead arm parallel to the ground in the downswing
+    /// ([`SwingEvents::arm_parallel_down`](super::SwingEvents::arm_parallel_down)).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arm_parallel_down: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub impact: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -198,7 +289,9 @@ impl Positions {
     fn map(self, f: impl Fn(f64) -> f64) -> Self {
         Self {
             address: self.address.map(&f),
+            arm_parallel_back: self.arm_parallel_back.map(&f),
             top: self.top.map(&f),
+            arm_parallel_down: self.arm_parallel_down.map(&f),
             impact: self.impact.map(&f),
             finish: self.finish.map(&f),
         }
@@ -206,7 +299,9 @@ impl Positions {
 
     fn is_empty(&self) -> bool {
         self.address.is_none()
+            && self.arm_parallel_back.is_none()
             && self.top.is_none()
+            && self.arm_parallel_down.is_none()
             && self.impact.is_none()
             && self.finish.is_none()
     }
@@ -355,10 +450,16 @@ pub struct BodyScale {
     /// Torso length at address (pelvis to shoulders midpoint), pixels: the
     /// unit of [`Unit::Torso`].
     pub torso_px: f64,
-    /// Centimetres per pixel, from the golfer's height: the torso is taken
-    /// as [`TORSO_PER_HEIGHT`] × height, matched to its longest 2D length in
-    /// the clip (the 90th percentile; the golfer stands upright before
-    /// address and at the finish, where the torso isn't foreshortened).
+    /// The upright torso, pixels: the torso's longest 2D length in the clip
+    /// (the 90th percentile, and at least [`BodyScale::torso_px`]; the
+    /// golfer stands upright before address and at the finish, where the
+    /// torso isn't foreshortened). [`BodyScale::cm_per_px`] is matched to
+    /// it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upright_px: Option<f64>,
+    /// Centimetres per pixel, from the golfer's height: the upright torso
+    /// ([`BodyScale::upright_px`]) is taken as [`TORSO_PER_HEIGHT`] ×
+    /// height.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cm_per_px: Option<f64>,
 }
@@ -390,6 +491,7 @@ impl BodyScale {
             .map(|h| TORSO_PER_HEIGHT * h / upright);
         Some(Self {
             torso_px,
+            upright_px: Some(upright),
             cm_per_px,
         })
     }
@@ -399,7 +501,9 @@ impl BodyScale {
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct KeyFrames {
     pub address: Option<usize>,
+    pub arm_parallel_back: Option<usize>,
     pub top: Option<usize>,
+    pub arm_parallel_down: Option<usize>,
     pub impact: Option<usize>,
     pub finish: Option<usize>,
 }
@@ -407,14 +511,39 @@ pub(crate) struct KeyFrames {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Pos {
     Address,
+    ArmParallelBack,
     Top,
+    ArmParallelDown,
     Impact,
     Finish,
 }
 
 const ADDRESS_TOP_IMPACT: &[Pos] = &[Pos::Address, Pos::Top, Pos::Impact];
-const ALL_POSITIONS: &[Pos] = &[Pos::Address, Pos::Top, Pos::Impact, Pos::Finish];
+const ADDRESS_TOP_IMPACT_FINISH: &[Pos] = &[Pos::Address, Pos::Top, Pos::Impact, Pos::Finish];
 const TOP_IMPACT: &[Pos] = &[Pos::Top, Pos::Impact];
+/// P3, top, P5 and impact.
+const SWING: &[Pos] = &[
+    Pos::ArmParallelBack,
+    Pos::Top,
+    Pos::ArmParallelDown,
+    Pos::Impact,
+];
+/// Address, P3, top, P5 and impact.
+const ADDRESS_TO_IMPACT: &[Pos] = &[
+    Pos::Address,
+    Pos::ArmParallelBack,
+    Pos::Top,
+    Pos::ArmParallelDown,
+    Pos::Impact,
+];
+const EVERY_POSITION: &[Pos] = &[
+    Pos::Address,
+    Pos::ArmParallelBack,
+    Pos::Top,
+    Pos::ArmParallelDown,
+    Pos::Impact,
+    Pos::Finish,
+];
 
 const PELVIS: &[Joint] = &[Joint::LeadHip, Joint::TrailHip];
 const SHOULDERS: &[Joint] = &[Joint::LeadShoulder, Joint::TrailShoulder];
@@ -425,6 +554,8 @@ const SPINE: &[Joint] = &[
     Joint::TrailShoulder,
 ];
 const HEAD: &[Joint] = &[Joint::Head];
+const HAND_AND_TRAIL_SHOULDER: &[Joint] =
+    &[Joint::TrailShoulder, Joint::LeadWrist, Joint::TrailWrist];
 
 /// Metric values are rounded to 4 decimal places: far below keypoint
 /// noise, and it keeps a series short in JSON.
@@ -487,7 +618,9 @@ impl Ctx<'_> {
     fn frame(&self, p: Pos) -> Option<usize> {
         match p {
             Pos::Address => self.keys.address,
+            Pos::ArmParallelBack => self.keys.arm_parallel_back,
             Pos::Top => self.keys.top,
+            Pos::ArmParallelDown => self.keys.arm_parallel_down,
             Pos::Impact => self.keys.impact,
             Pos::Finish => self.keys.finish,
         }
@@ -528,7 +661,9 @@ impl Ctx<'_> {
             };
             let slot = match p {
                 Pos::Address => &mut values.address,
+                Pos::ArmParallelBack => &mut values.arm_parallel_back,
                 Pos::Top => &mut values.top,
+                Pos::ArmParallelDown => &mut values.arm_parallel_down,
                 Pos::Impact => &mut values.impact,
                 Pos::Finish => &mut values.finish,
             };
@@ -604,7 +739,7 @@ pub(crate) fn measure(
     let defs = match setup {
         Some(s) if s.view == View::FaceOn => face_on(&ctx, s.forward_x()),
         Some(s) => down_the_line(&ctx, s.forward_x()),
-        None => vec![head_vertical(&ctx)],
+        None => vec![head_vertical(&ctx), pelvis_lift(&ctx)],
     };
     let metrics = defs.iter().filter_map(|d| ctx.measure(d)).collect();
     let series: Vec<MetricSeries> = defs.iter().filter_map(|d| ctx.series(d)).collect();
@@ -626,6 +761,13 @@ fn head_vertical<'a>(ctx: &'a Ctx) -> Def<'a> {
     })
 }
 
+fn pelvis_lift<'a>(ctx: &'a Ctx) -> Def<'a> {
+    let l = ctx.scale.torso_px;
+    Def::relative(MetricId::PelvisLift, TOP_IMPACT, PELVIS, move |b, a| {
+        Some((a.pelvis()?.y - b.pelvis()?.y) / l)
+    })
+}
+
 /// A width ratio `a`–`b` over `c`–`d`.
 fn ratio(body: &Body, (a, b): (Joint, Joint), over: &Body, (c, d): (Joint, Joint)) -> Option<f64> {
     let base = over.width(c, d)?;
@@ -634,38 +776,81 @@ fn ratio(body: &Body, (a, b): (Joint, Joint), over: &Body, (c, d): (Joint, Joint
         .flatten()
 }
 
-/// The turn (degrees) a segment square to the camera at address shows as
-/// its width ratio now: `acos(ratio)`, `None` above 1 (a turn can't widen
-/// it).
-fn turn(body: &Body, address: &Body, pair: (Joint, Joint)) -> Option<f64> {
-    ratio(body, pair, address, pair)
-        .filter(|&r| r <= 1.0)
-        .map(|r| r.acos().to_degrees())
+/// How far (as a fraction) a line may show longer than its address length
+/// before the line solve gives up: rounding only, so the address frame
+/// itself always solves.
+const LINE_SLACK: f64 = 1e-9;
+
+/// The line solve ([`MetricId`]): the tilt φ and turn θ (degrees) of a line
+/// of true length `w0` that shows `dx` across (either sign) and `dy` up
+/// (positive with the lead end higher). `None` when `w0` has no length or
+/// an input isn't finite.
+///
+/// A line showing longer than `w0` (`hypot(dx, dy) > w0`, the same as
+/// `|dy| > w0` or `dx > w0 cos φ`) has no turn, and its tilt is its angle
+/// from horizontal: the solve for a square line of its own length, which
+/// meets the solve where the line shows exactly `w0`. A vertical line has
+/// no turn either.
+pub(crate) fn solve_line(dx: f64, dy: f64, w0: f64) -> Option<(f64, Option<f64>)> {
+    if !(w0 >= 1e-6 && w0.is_finite() && dx.is_finite() && dy.is_finite()) {
+        return None;
+    }
+    let dx = dx.abs();
+    if dx.hypot(dy) > w0 * (1.0 + LINE_SLACK) {
+        return Some((dy.atan2(dx).to_degrees(), None));
+    }
+    let tilt = (dy / w0).clamp(-1.0, 1.0).asin();
+    let base = w0 * tilt.cos();
+    let turn = (base >= 1e-6).then(|| (dx / base).min(1.0).acos().to_degrees());
+    Some((tilt.to_degrees(), turn))
+}
+
+/// The line solve on the body line `pair` (lead, trail) against its length
+/// at address: the tilt and, where measurable, the turn, in degrees.
+fn line_pose(
+    body: &Body,
+    address: &Body,
+    (lead, trail): (Joint, Joint),
+) -> Option<(f64, Option<f64>)> {
+    let w0 = address.width(lead, trail)?;
+    let (l, t) = (body.at(lead)?, body.at(trail)?);
+    solve_line(l.x - t.x, t.y - l.y, w0)
 }
 
 fn face_on<'a>(ctx: &'a Ctx, fwd: f64) -> Vec<Def<'a>> {
     const HIPS: (Joint, Joint) = (Joint::LeadHip, Joint::TrailHip);
     const SHOULDER_LINE: (Joint, Joint) = (Joint::LeadShoulder, Joint::TrailShoulder);
+    let l = ctx.scale.torso_px;
     vec![
-        Def::relative(MetricId::HipSway, TOP_IMPACT, PELVIS, move |b, a| {
+        Def::relative(MetricId::HipSway, SWING, PELVIS, move |b, a| {
             ctx.shift_x(b.pelvis(), a.pelvis(), fwd)
         }),
-        Def::relative(MetricId::HeadLateral, TOP_IMPACT, HEAD, move |b, a| {
+        Def::relative(MetricId::ChestSway, SWING, SHOULDERS, move |b, a| {
+            ctx.shift_x(b.shoulders(), a.shoulders(), fwd)
+        }),
+        Def::metric(MetricId::SwayGap, ADDRESS_TO_IMPACT, SPINE, move |b, _| {
+            Some(fwd * (b.shoulders()?.x - b.pelvis()?.x) / l)
+        }),
+        Def::relative(MetricId::HeadLateral, SWING, HEAD, move |b, a| {
             ctx.shift_x(b.head(), a.head(), fwd)
         }),
         head_vertical(ctx),
+        pelvis_lift(ctx),
         Def::metric(
             MetricId::LateralSpineTilt,
-            ADDRESS_TOP_IMPACT,
+            EVERY_POSITION,
             SPINE,
             move |b, _| b.spine_tilt(-fwd),
         ),
         Def::metric(
             MetricId::ShoulderTilt,
-            &[Pos::Address, Pos::Impact],
+            ADDRESS_TOP_IMPACT,
             SHOULDERS,
-            |b, _| b.shoulder_tilt(),
+            |b, a| line_pose(b, a, SHOULDER_LINE).map(|(tilt, _)| tilt),
         ),
+        Def::metric(MetricId::HipTilt, ADDRESS_TOP_IMPACT, PELVIS, |b, a| {
+            line_pose(b, a, HIPS).map(|(tilt, _)| tilt)
+        }),
         Def::metric(
             MetricId::LeadArmAngle,
             ADDRESS_TOP_IMPACT,
@@ -689,11 +874,11 @@ fn face_on<'a>(ctx: &'a Ctx, fwd: f64) -> Vec<Def<'a>> {
             PELVIS,
             |b, a| ratio(b, HIPS, a, HIPS).filter(|&r| r <= 1.0),
         ),
-        Def::relative(MetricId::HipTurn, TOP_IMPACT, PELVIS, |b, a| {
-            turn(b, a, HIPS)
+        Def::relative(MetricId::HipTurn, SWING, PELVIS, |b, a| {
+            line_pose(b, a, HIPS)?.1
         }),
-        Def::relative(MetricId::ShoulderTurn, TOP_IMPACT, SHOULDERS, |b, a| {
-            turn(b, a, SHOULDER_LINE)
+        Def::relative(MetricId::ShoulderTurn, SWING, SHOULDERS, |b, a| {
+            line_pose(b, a, SHOULDER_LINE)?.1
         }),
     ]
 }
@@ -702,27 +887,28 @@ fn down_the_line<'a>(ctx: &'a Ctx, fwd: f64) -> Vec<Def<'a>> {
     let l = ctx.scale.torso_px;
     vec![
         head_vertical(ctx),
+        pelvis_lift(ctx),
         Def::metric(
             MetricId::SpineForwardBend,
-            ADDRESS_TOP_IMPACT,
+            ADDRESS_TO_IMPACT,
             SPINE,
             move |b, _| b.spine_tilt(fwd),
         ),
-        Def::relative(MetricId::LossOfPosture, TOP_IMPACT, SPINE, move |b, a| {
+        Def::relative(MetricId::LossOfPosture, SWING, SPINE, move |b, a| {
             Some(a.spine_tilt(fwd)? - b.spine_tilt(fwd)?)
         }),
-        Def::relative(MetricId::EarlyExtension, TOP_IMPACT, PELVIS, move |b, a| {
+        Def::relative(MetricId::EarlyExtension, SWING, PELVIS, move |b, a| {
             ctx.shift_x(b.pelvis(), a.pelvis(), fwd)
         }),
         Def::metric(
             MetricId::LeadKneeFlex,
-            ALL_POSITIONS,
+            ADDRESS_TOP_IMPACT_FINISH,
             &[Joint::LeadHip, Joint::LeadKnee, Joint::LeadAnkle],
             |b, _| b.knee_flex(true),
         ),
         Def::metric(
             MetricId::TrailKneeFlex,
-            ALL_POSITIONS,
+            ADDRESS_TOP_IMPACT_FINISH,
             &[Joint::TrailHip, Joint::TrailKnee, Joint::TrailAnkle],
             |b, _| b.knee_flex(false),
         ),
@@ -735,8 +921,14 @@ fn down_the_line<'a>(ctx: &'a Ctx, fwd: f64) -> Vec<Def<'a>> {
         Def::metric(
             MetricId::HandHeight,
             &[Pos::Top],
-            &[Joint::TrailShoulder, Joint::LeadWrist, Joint::TrailWrist],
+            HAND_AND_TRAIL_SHOULDER,
             move |b, _| Some((b.at(Joint::TrailShoulder)?.y - b.hands()?.y) / l),
+        ),
+        Def::metric(
+            MetricId::HandDepth,
+            &[Pos::Top],
+            HAND_AND_TRAIL_SHOULDER,
+            move |b, _| Some(-fwd * (b.hands()?.x - b.at(Joint::TrailShoulder)?.x) / l),
         ),
     ]
 }

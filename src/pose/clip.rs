@@ -94,6 +94,9 @@ pub fn analyze_clip<P: PoseEngine, D: PersonDetector>(
 
 /// Runs pose estimation over a clip's frames: `(t_ns, jpeg)` in clip order.
 ///
+/// Every decoded frame is first turned by [`PoseConfig::rotation`]; the
+/// track is in the turned frame.
+///
 /// 1. The detector runs on every [`PoseConfig::detect_every`]-th frame and
 ///    the last, in parallel. The golfer is picked on the first of these
 ///    frames with a person and followed through the others by IoU.
@@ -139,7 +142,7 @@ where
         keyframes.push(n - 1);
     }
     let budget = DecodeBudget::new(DECODE_BUDGET);
-    let decode = |i: usize| budget.decode(frames[i].1.as_ref()).ok();
+    let decode = |i: usize| budget.decode(frames[i].1.as_ref(), config.rotation).ok();
     let workers = config.worker_count();
     let hook = config.on_worker_start.as_ref();
 
@@ -212,6 +215,7 @@ where
         detector: m.detector.model_name().to_owned(),
         width,
         height,
+        rotation: config.rotation,
         frames: frames
             .iter()
             .zip(&poses)
@@ -344,7 +348,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pose::{Image, Keypoint, Skeleton};
+    use crate::pose::{Image, Keypoint, Rotation, Skeleton};
 
     /// A pose engine whose score is the image's brightness: dark frames
     /// pose badly wherever they are cropped.
@@ -489,6 +493,139 @@ mod tests {
     #[test]
     fn no_hook_is_the_default() {
         assert_eq!(PoseConfig::default().on_worker_start, None);
+    }
+
+    /// The centroid of the image's bright pixels.
+    fn blob(image: &Image) -> (f32, f32) {
+        let (mut sx, mut sy, mut n) = (0.0f32, 0.0f32, 0.0f32);
+        for y in 0..image.height() {
+            for x in 0..image.width() {
+                if image.pixel(x, y).unwrap()[0] > 128 {
+                    // Test images are small.
+                    #[allow(clippy::cast_precision_loss)]
+                    {
+                        sx += x as f32;
+                        sy += y as f32;
+                    }
+                    n += 1.0;
+                }
+            }
+        }
+        (sx / n, sy / n)
+    }
+
+    /// A pose engine and detector that find the one bright blob: keypoints
+    /// at fixed offsets from it, in image pixels.
+    struct BlobPose;
+
+    impl PoseEngine for BlobPose {
+        fn skeleton(&self) -> Skeleton {
+            Skeleton::Halpe26
+        }
+        fn model_name(&self) -> &'static str {
+            "blob"
+        }
+        fn fork(&self) -> Result<Self> {
+            Ok(Self)
+        }
+        fn estimate(&mut self, image: &Image, bbox: &BBox) -> Result<Pose> {
+            let (x, y) = blob(image);
+            let kps = (0..26u8)
+                .map(|i| Keypoint {
+                    x: x + f32::from(i % 3),
+                    y: y + f32::from(i / 3),
+                    score: 0.9,
+                })
+                .collect();
+            Ok(Pose::new(Skeleton::Halpe26, kps, *bbox))
+        }
+    }
+
+    impl PersonDetector for BlobPose {
+        fn model_name(&self) -> &'static str {
+            "blob"
+        }
+        fn fork(&self) -> Result<Self> {
+            Ok(Self)
+        }
+        fn detect(&mut self, image: &Image) -> Result<Vec<Detection>> {
+            let (x, y) = blob(image);
+            Ok(vec![Detection {
+                bbox: BBox::new(x - 10.0, y - 10.0, x + 10.0, y + 10.0),
+                score: 0.9,
+            }])
+        }
+    }
+
+    fn encode(image: &Image) -> Vec<u8> {
+        let mut out = Vec::new();
+        jpeg_encoder::Encoder::new(&mut out, 95)
+            .encode(
+                image.data(),
+                u16::try_from(image.width()).unwrap(),
+                u16::try_from(image.height()).unwrap(),
+                jpeg_encoder::ColorType::Rgb,
+            )
+            .unwrap();
+        out
+    }
+
+    #[test]
+    fn rotated_frames_give_the_upright_track() {
+        // An upright 64 × 48 scene with a bright square that moves.
+        let scene = |i: u32| {
+            let mut data = vec![0u8; 64 * 48 * 3];
+            for y in 10..18 {
+                for x in 20 + 2 * i..28 + 2 * i {
+                    let p = ((y * 64 + x) * 3) as usize;
+                    data[p..p + 3].copy_from_slice(&[255, 255, 255]);
+                }
+            }
+            Image::new(64, 48, data).unwrap()
+        };
+        let models = PoseModels::new(BlobPose, BlobPose);
+        let config = PoseConfig {
+            detect_every: 2,
+            threads: 2,
+            ..PoseConfig::default()
+        };
+        let frames = |turn: Rotation| -> Vec<(u64, Vec<u8>)> {
+            (0..6)
+                .map(|i| (u64::from(i) * 8_333_333, encode(&scene(i).rotated(turn))))
+                .collect()
+        };
+        let upright = analyze_frames(&models, &frames(Rotation::None), &config).unwrap();
+        assert_eq!((upright.width, upright.height), (64, 48));
+        assert_eq!(upright.rotation, Rotation::None);
+        for (rotation, mounted) in [
+            (Rotation::Cw90, Rotation::Ccw90),
+            (Rotation::Half, Rotation::Half),
+            (Rotation::Ccw90, Rotation::Cw90),
+        ] {
+            // A camera mounted turned by `mounted` records the scene turned
+            // that way; `rotation` turns it back.
+            let stored = frames(mounted);
+            let raw = analyze_frames(&models, &stored, &config).unwrap();
+            assert_eq!((raw.width, raw.height), mounted.dimensions(64, 48));
+            let config = PoseConfig {
+                rotation,
+                ..config.clone()
+            };
+            let track = analyze_frames(&models, &stored, &config).unwrap();
+            assert_eq!(track.rotation, rotation);
+            assert_eq!((track.width, track.height), (64, 48), "{rotation:?}");
+            for (f, g) in track.frames.iter().zip(&upright.frames) {
+                assert_eq!(f.t_ns, g.t_ns);
+                assert_eq!(f.keypoints.len(), 26);
+                for (k, u) in f.keypoints.iter().zip(&g.keypoints) {
+                    assert!(
+                        (k.x - u.x).abs() < 0.3 && (k.y - u.y).abs() < 0.3,
+                        "{rotation:?} at {}: {k:?} vs {u:?}",
+                        f.t_ns
+                    );
+                }
+            }
+        }
     }
 
     fn b(x: f32) -> BBox {

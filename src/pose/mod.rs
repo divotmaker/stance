@@ -87,7 +87,7 @@ pub use clip::{WorkerHook, analyze_clip, analyze_frames};
 pub use download::{FetchProgress, fetch_model, fetch_model_with};
 pub use filter::{Butterworth, OneEuro, OneEuroParams};
 pub use geometry::{BBox, Detection};
-pub use image::{Image, MAX_DECODE_DIMENSION, decode_jpeg};
+pub use image::{Image, MAX_DECODE_DIMENSION, Rotation, decode_jpeg};
 pub use model::{
     MODELS, ModelKind, ModelSpec, RTMPOSE_M_HALPE26, RTMPOSE_S_HALPE26, YOLOX_NANO, YOLOX_TINY,
 };
@@ -336,6 +336,13 @@ pub struct PoseConfig {
     /// set up the workers, e.g. lower their priority so the pass yields
     /// the CPU to other programs. The live tracker doesn't use it.
     pub on_worker_start: Option<WorkerHook>,
+    /// Quarter turns applied to every frame before detection and pose, for
+    /// a camera mounted on its side: by the clip pass on every frame it
+    /// decodes, and by the live tracker on every image it is given. The
+    /// track's keypoints, [`PoseTrack::width`] and [`PoseTrack::height`]
+    /// are in the turned frame, and [`PoseTrack::rotation`] records it; the
+    /// live tracker's poses are in the turned frame too.
+    pub rotation: Rotation,
 }
 
 impl Default for PoseConfig {
@@ -352,6 +359,7 @@ impl Default for PoseConfig {
             threads: 0,
             inference_threads: 0,
             on_worker_start: None,
+            rotation: Rotation::None,
         }
     }
 }

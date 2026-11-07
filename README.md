@@ -245,6 +245,13 @@ single executable with no native libraries, on Windows, Linux and macOS.
   the worker count, and `on_worker_start` (a `WorkerHook`) runs at the start
   of every worker thread, on that thread, e.g. to lower its priority so a
   simulator on the same computer keeps the CPU it needs.
+- **Cameras on their side:** `PoseConfig::rotation` (a `Rotation`: 0, 90,
+  180 or 270 degrees clockwise) turns every frame before detection and
+  pose, in the clip pass and in `PoseTracker::track` alike, so a portrait
+  camera gives an upright golfer. Clips stay as the camera sent them; the
+  keypoints are in the turned frame (as are a track's `width` and
+  `height`), and `PoseTrack::rotation` records the turn (absent in the JSON
+  when 0).
 - **Absent, not garbage:** a pose whose mean score is below
   `min_pose_score` (default 0.3) is `None` live and an empty frame in a
   `PoseTrack`, never stored.
@@ -342,10 +349,16 @@ keypoints (no models), behind the same `pose` feature.
   smoothed with a zero-phase 8 Hz Butterworth, filtered separately before
   and after impact so the fastest frames don't smear.
 - **Events** from the hands (the wrists' midpoint): address (hands at
-  rest), takeaway (they start moving), top (the start of the downswing, so
-  a pause there counts as backswing), impact, and finish (the hands settle
-  high after the follow-through). Each has a time on the track's time base
-  and a confidence.
+  rest), takeaway (they start moving), lead arm parallel back (P3), top
+  (the start of the downswing, so a pause there counts as backswing), lead
+  arm parallel down (P5), impact, and finish (the hands settle high after
+  the follow-through). P3 and P5 are where the lead wrist passes the lead
+  shoulder's height, in either view: P3 the last time it rises through it
+  at least a frame before the top, P5 the first time it falls through it at
+  least a frame after. A swing whose hands never get that high (a chip) has
+  neither. On real swings P5 comes a few frames (at 120 fps) before the
+  frame people pick by eye as "arm parallel". Each event has a time on the
+  track's time base and a confidence.
 - **Impact** is 25 ms after the hands' low point in the swing's clearest
   down-and-up (a fast downswing of plausible length into a follow-through,
   so a practice swing's lowering or hands brought down to address don't
@@ -366,42 +379,85 @@ keypoints (no models), behind the same `pose` feature.
   is known. Two similar low points near a given time are told apart by
   their distance from it, so on a hard clip (golfer partly out of frame)
   the impact can move between them as the time moves.
-- **Metrics** at address, top, impact and finish, each with its view, unit
-  and a confidence from the keypoint scores:
+- **Metrics** at address, P3, top, P5, impact and finish (each where it
+  applies), with its view, unit and a confidence from the keypoint scores.
+  Shifts are from address; distances are in torso lengths (and cm):
 
-| Face-on | Down the line | Either view |
-|---|---|---|
-| hip sway (top, impact), head shift (lateral), lateral spine tilt, shoulder tilt (address, impact), lead-arm angle, stance width, hip width proxy (a pelvis-turn proxy; absent when above 1), hip turn and shoulder turn (estimates; top, impact) | spine forward bend, loss of posture, early extension, lead and trail knee flex, trail-elbow angle, hand height at the top | head shift (vertical) |
+| Metric | View | Positions | Positive means |
+|---|---|---|---|
+| hip sway | face-on | P3, top, P5, impact | pelvis moved towards the target |
+| chest sway | face-on | P3, top, P5, impact | shoulders' midpoint moved towards the target |
+| sway gap | face-on | address, P3, top, P5, impact | shoulders ahead of the pelvis towards the target (typically negative at the top and impact) |
+| head shift (lateral) | face-on | P3, top, P5, impact | head moved towards the target |
+| head shift (vertical) | either | top, impact | head rose |
+| pelvis lift | either | top, impact | pelvis rose (it typically drops at the top and rises into impact) |
+| lateral spine tilt | face-on | address, P3, top, P5, impact, finish | shoulders tilted away from the target; at the finish, the bend back |
+| shoulder tilt | face-on | address, top (beta), impact | lead shoulder higher (negative at the top) |
+| hip tilt | face-on | address, top, impact | lead hip higher |
+| lead-arm angle | face-on | address, top, impact | degrees at the elbow (180 = straight) |
+| stance width | face-on | address | ankle width / shoulder width |
+| hip width proxy | face-on | top, impact, finish | hip width / its address width (a pelvis-turn proxy; absent above 1) |
+| hip turn, shoulder turn | face-on | P3, top, P5, impact | turned from square (unsigned estimates) |
+| spine forward bend | down the line | address, P3, top, P5, impact | spine leaning towards the ball |
+| loss of posture | down the line | P3, top, P5, impact | more upright than at address |
+| early extension | down the line | P3, top, P5, impact | pelvis moved towards the ball |
+| lead and trail knee flex | down the line | address, top, impact, finish | degrees of bend (0 = straight) |
+| trail-elbow angle | down the line | address, top, impact | degrees at the elbow |
+| hand height | down the line | top | hands above the trail shoulder |
+| hand depth | down the line | top | hands behind the trail shoulder, away from the ball |
 
 - **Per frame:** `SwingReport::series` holds every measured metric's value
   at every frame of the smoothed track (`t_ns` plus one value list per
   metric, `null` where the keypoints weren't found), with the same formulas
   and keypoints as the key positions, so a display can follow a replay
-  frame by frame. Shifts and turns are against the address frame. Values
-  are rounded to 4 decimal places; a face-on report is about 100 bytes per
-  frame (about 45 kB for a 460-frame clip). Reports without a series still
-  read.
+  frame by frame. Shifts, tilts and turns are against the address frame.
+  Values are rounded to 4 decimal places; a face-on report is about 130
+  bytes per frame (about 60 kB for a 460-frame clip). Reports without a
+  series, P3/P5 or the newer metrics still read.
+- **Bands:** `golf::norms` grades the metrics and the tempo against bands
+  from published tour and amateur averages, for a club class, sex and
+  reference (`Norms::builtin().grade_report(&report, &ctx)`). Each value
+  gets a fit (inside the band; inside the fade and/or draw band of the four
+  shape-linked quantities at impact; near; far), its side of the centre,
+  and for a miss the direction word and the pattern it tends to produce.
+  One-camera turns take the band's sign and are graded at impact only. The
+  table is a versioned JSON file in the crate; `docs/NORMS.md` lists every
+  band with its sources, signs and limits.
 
 All metrics are **2D proxies** measured in one camera's image plane, not 3D
 joint angles: motion towards or away from the camera is invisible, and
 rotations only show as foreshortening.
-**Hip and shoulder turn** are one-camera estimates from that
-foreshortening: `acos(w / w₀)` of the hip-to-hip (shoulder-to-shoulder)
-distance against address, in degrees, absent when the ratio is above 1.
-They need the body square to the camera at address (any angle there reads
-as turn) and can't tell which way the body turned. Keypoint drift grows with
-the turn (the far hip or shoulder is hidden), a body seen end-on still shows
-its depth and the forward bend tilts the shoulder line rather than
-shortening it, so large turns read low; near 90° they saturate (a few
-pixels move them by many degrees) and a turn past 90° reads as less, so
-they aren't reported at the finish. X-factor and the kinematic sequence
-need two calibrated views and are not reported.
+**Hip and shoulder tilt and turn** come from one solve per body line (hip
+to hip, shoulder to shoulder): a line of length `w₀` at address, tilted by
+φ and turned by θ about the vertical, shows `dx = w₀ cos φ cos θ` across
+and `dy = w₀ sin φ` up, so `φ = asin(dy / w₀)` and
+`θ = acos(dx / (w₀ cos φ))`. A tilted line therefore doesn't read as extra
+turn, and a turned line doesn't inflate the tilt (which is why the
+shoulder tilt is reported at the top). The solve runs at every position
+and frame; where a line shows longer than at address, it has no turn and
+its tilt is its plain angle from horizontal.
+For a distant camera φ is the line's true angle to the horizontal (the
+lead shoulder dropping as the bent-over golfer turns is part of it). What
+limits it: perspective (for a centred golfer and a 55° lens, a 45° hip
+turn reads about 1° high at 2 m and 0.5° at 5 m, the hip sway is off by
+under 1 cm at 2 m, and a body off the camera's axis by `x` at distance
+`D` reads turned by about `x / D` radians); keypoint drift as the far hip
+or shoulder hides, and saturation near 90° (a few pixels move the turn by
+many degrees, and a turn past 90° reads as less, so neither turn is
+reported at the finish); camera roll, which adds to every tilt (level the
+camera: a non-zero address shoulder tilt where you expect level is roll);
+an address assumed square to the camera (any angle there reads as turn);
+and one camera can't tell which way the body turned. The shoulder tilt at
+the top reads less lead-side-down than published tour averages on real
+swings, so it is beta. X-factor and the kinematic sequence need two
+calibrated views and are not reported.
 Distances are fractions of the golfer's torso length at address, and
 centimetres when the golfer's height is given. Face-on, the forward bend
 foreshortens the torso (by about 0.82 at 35°), so face-on fractions read
 about 20 % larger than down the line; centimetres are unaffected. The
-lateral shifts face-on (hip sway: the pelvis, head shift: the head, both
-from address) are positive towards the target and negative away from it.
+lateral shifts face-on (hip sway: the pelvis, chest sway: the shoulders,
+head shift: the head, all from address) are positive towards the target
+and negative away from it.
 The rustdoc of `MetricId` gives every formula.
 
 Handedness is the caller's (`Handed`); a left-hander's metrics are the exact
@@ -435,12 +491,14 @@ println!("spine {:?}°, head shift {:?}", now.spine_angle, now.head_shift(&at_ad
 ```text
 cargo run --release --example golf_report --features pose -- <models dir> <clip.avi> \
     [--view fo|dtl] [--handed r|l] [--impact-ns N | --estimate-impact] [--height-cm H] \
-    [--mirrored] [--render <out dir>]
+    [--mirrored] [--rotate 0|90|180|270] [--render <out dir>] \
+    [--grade driver|iron|wedge [male|female] [tour|amateur]]
 ```
 
 `golf_report` prints the report and, with `--render`, writes the
 `.swing.json` and a still at each event with the skeleton, the hands' path
-and the numbers drawn on it.
+and the numbers drawn on it. `--rotate` is for a camera on its side.
+`--grade` adds each graded number with its band, z, fit and words.
 
 ## Resource use
 

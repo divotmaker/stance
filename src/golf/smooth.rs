@@ -249,6 +249,7 @@ pub fn smooth_track(
         detector: track.detector.clone(),
         width: track.width,
         height: track.height,
+        rotation: track.rotation,
         frames: out,
     })
 }

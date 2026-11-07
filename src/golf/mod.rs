@@ -6,7 +6,8 @@
 //! - [`analyze_swing`] turns a pose track (and, ideally, the launch
 //!   monitor's impact time, which it refines against the hands) into a
 //!   [`SwingReport`]: [`SwingEvents`]
-//!   (address, takeaway, top, impact, finish), [`Tempo`], the view's
+//!   (address, takeaway, lead arm parallel back, top, lead arm parallel
+//!   down, impact, finish), [`Tempo`], the view's
 //!   [`Metric`]s at each key position and their [`Series`] over every
 //!   frame. [`SwingReport::write_beside`] stores it as `<clip>.swing.json`.
 //! - [`posture`] measures one [`Pose`](crate::pose::Pose) for a live display
@@ -15,10 +16,25 @@
 //!   [`PostureFilter`] smooths the stream.
 //! - [`guess_view`] tells face-on from down-the-line from an address pose.
 //! - [`smooth_track`] gives the cleaned keypoints the analysis measures on.
+//! - [`norms`] grades the metrics and the tempo against bands from
+//!   published tour and amateur averages.
+//!
+//! # Bands
+//!
+//! A [`SwingReport`] carries no grades: grading depends on the golfer's
+//! sex, the club and the reference population, which the report doesn't
+//! know. [`Norms::builtin`] is the built-in band table and
+//! [`Norms::grade_report`] grades a report for a [`Context`]: each value
+//! gets a [`Fit`] (inside the band, or inside the fade and/or draw band of
+//! a shape-linked one, near, far), the side of the centre it is on, and for
+//! a miss the direction word and the pattern it tends to produce.
+//! `docs/NORMS.md` lists the bands and their sources.
 //!
 //! # Coordinates and sides
 //!
-//! Keypoints are image pixels, `x` to the right and `y` down. [`Joint`]
+//! Keypoints are image pixels, `x` to the right and `y` down, in an upright
+//! frame: a track from a camera on its side is turned upright by the pose
+//! pass ([`PoseConfig::rotation`](crate::pose::PoseConfig::rotation)). [`Joint`]
 //! names keypoints by role (lead/trail) for a [`Handed`] golfer, so a
 //! left-hander mirrors a right-hander exactly. [`Setup`] says which image
 //! direction is towards the target (face-on: +x for a right-hander) or the
@@ -33,9 +49,10 @@
 //! for coaching feedback, not 3D joint angles: a lean towards or away from
 //! the camera is invisible, and rotations show only as foreshortening.
 //! The hip and shoulder turns are estimated from that foreshortening, face-on
-//! only. [`MetricId`] defines each one (formula, view, unit, limits). Distances are
-//! fractions of the golfer's torso length at address, and centimetres when
-//! the golfer's height is given ([`BodyScale`]).
+//! only, in one solve with the hip and shoulder tilts. [`MetricId`] defines
+//! each one (formula, view, unit, limits). Distances are fractions of the
+//! golfer's torso length at address, and centimetres when the golfer's
+//! height is given ([`BodyScale`]).
 //!
 //! # Example
 //!
@@ -62,6 +79,7 @@
 mod body;
 mod events;
 mod metrics;
+pub mod norms;
 mod posture;
 mod report;
 mod smooth;
@@ -72,6 +90,7 @@ pub use events::{ImpactSource, SwingEvent, SwingEvents, Tempo};
 pub use metrics::{
     BodyScale, Metric, MetricId, MetricSeries, Positions, Series, TORSO_PER_HEIGHT, Unit,
 };
+pub use norms::{ClubClass, Context, Fit, Grade, Norms, Position, Reference, Sex, Side};
 pub use posture::{HeadShift, Posture, PostureFilter, posture, unmirror};
 pub use report::{
     MAX_SWING_REPORT_BYTES, SWING_REPORT_VERSION, SwingOptions, SwingReport, analyze_swing,

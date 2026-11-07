@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use serde::{Deserialize, Serialize};
 
 use super::geometry::BBox;
+use super::image::Rotation;
 use super::skeleton::Skeleton;
 use super::{Keypoint, Pose};
 use crate::{Error, Result};
@@ -29,6 +30,7 @@ pub const POSE_TRACK_VERSION: u32 = 1;
 ///   "detector": "yolox-tiny",
 ///   "width": 1280,
 ///   "height": 720,
+///   "rotation": 90,
 ///   "frames": [
 ///     { "t_ns": 0, "score": 0.81, "bbox": { "x1": 512.0, "y1": 96.0, "x2": 790.0, "y2": 700.0 },
 ///       "keypoints": [[651.2, 160.4, 0.93], "… 26 in all"] },
@@ -46,10 +48,16 @@ pub struct PoseTrack {
     pub model: String,
     /// The person detector's name.
     pub detector: String,
-    /// Frame width in pixels.
+    /// Frame width in pixels, after [`PoseTrack::rotation`].
     pub width: u32,
-    /// Frame height in pixels.
+    /// Frame height in pixels, after [`PoseTrack::rotation`].
     pub height: u32,
+    /// The turn applied to the clip's frames before pose estimation
+    /// ([`PoseConfig::rotation`](super::PoseConfig::rotation)): keypoints
+    /// are in the turned frame. Written only when not 0; a file without it
+    /// reads as 0.
+    #[serde(default, skip_serializing_if = "Rotation::is_none")]
+    pub rotation: Rotation,
     /// One entry per clip frame, in clip order.
     pub frames: Vec<PoseFrame>,
 }
@@ -226,6 +234,7 @@ mod tests {
             detector: "yolox-tiny".into(),
             width: 640,
             height: 480,
+            rotation: Rotation::None,
             frames: vec![
                 PoseFrame::with_pose(0, &pose),
                 PoseFrame::empty(8_333_333),
@@ -247,6 +256,17 @@ mod tests {
         let pose = t.frames[0].pose(Skeleton::Halpe26).unwrap();
         assert_eq!(pose.keypoints.len(), 26);
         assert!(t.frames[1].pose(Skeleton::Halpe26).is_none());
+        // Upright tracks don't write the rotation; turned ones do.
+        assert!(!json.contains("rotation"));
+        let turned = PoseTrack {
+            rotation: Rotation::Ccw90,
+            ..t.clone()
+        };
+        let json = turned.to_json().unwrap();
+        assert!(json.contains("\"rotation\":270"), "{json}");
+        assert_eq!(PoseTrack::from_json(&json).unwrap(), turned);
+        let bad = json.replace("\"rotation\":270", "\"rotation\":45");
+        assert!(PoseTrack::from_json(&bad).is_err());
     }
 
     #[test]

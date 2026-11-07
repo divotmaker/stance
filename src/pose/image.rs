@@ -108,6 +108,144 @@ impl Image {
         let i = (y as usize * self.width as usize + x as usize) * 3 + c;
         self.data.get(i).map(|&v| f32::from(v))
     }
+
+    /// The image turned by `rotation` (a copy; [`Rotation::None`] returns
+    /// an equal image). Quarter turns swap the width and the height.
+    #[must_use]
+    pub fn rotated(&self, rotation: Rotation) -> Image {
+        if rotation == Rotation::None {
+            return self.clone();
+        }
+        let (width, height) = (self.width, self.height);
+        let (out_w, out_h) = rotation.dimensions(width, height);
+        let mut data = vec![0; self.data.len()];
+        for (i, src) in self.data.chunks_exact(3).enumerate() {
+            // `i` indexes a width × height image, so both coordinates fit u32.
+            #[allow(clippy::cast_possible_truncation, reason = "inside the image")]
+            let (col, row) = ((i % width as usize) as u32, (i / width as usize) as u32);
+            let (to_col, to_row) = rotation.pixel(col, row, width, height);
+            let at = (to_row as usize * out_w as usize + to_col as usize) * 3;
+            data[at..at + 3].copy_from_slice(src);
+        }
+        Image {
+            width: out_w,
+            height: out_h,
+            data,
+        }
+    }
+
+    /// Turns the image by a half turn in place.
+    fn rotate_half(&mut self) {
+        let pixels = self.data.len() / 3;
+        for i in 0..pixels / 2 {
+            let j = pixels - 1 - i;
+            for c in 0..3 {
+                self.data.swap(i * 3 + c, j * 3 + c);
+            }
+        }
+    }
+}
+
+/// Quarter turns applied to every decoded frame before detection and pose
+/// ([`PoseConfig::rotation`](super::PoseConfig::rotation)), so a camera
+/// mounted on its side gives an upright picture. Clips stay as the camera
+/// sent them; keypoints, [`PoseTrack::width`](super::PoseTrack::width) and
+/// [`PoseTrack::height`](super::PoseTrack::height) are in the turned frame.
+///
+/// In JSON it is the clockwise angle in degrees: `0`, `90`, `180` or `270`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Rotation {
+    /// As the camera sent it.
+    #[default]
+    None,
+    /// A quarter turn clockwise: the frame's left edge becomes its top.
+    Cw90,
+    /// A half turn.
+    Half,
+    /// A quarter turn anticlockwise: the frame's right edge becomes its
+    /// top.
+    Ccw90,
+}
+
+impl Rotation {
+    /// The rotation of `degrees` clockwise: `0`, `90`, `180` or `270`
+    /// (anything else is `None`).
+    #[must_use]
+    pub fn from_degrees(degrees: u16) -> Option<Self> {
+        match degrees {
+            0 => Some(Self::None),
+            90 => Some(Self::Cw90),
+            180 => Some(Self::Half),
+            270 => Some(Self::Ccw90),
+            _ => None,
+        }
+    }
+
+    /// The clockwise angle in degrees.
+    #[must_use]
+    pub fn degrees(self) -> u16 {
+        match self {
+            Self::None => 0,
+            Self::Cw90 => 90,
+            Self::Half => 180,
+            Self::Ccw90 => 270,
+        }
+    }
+
+    /// Whether this is [`Rotation::None`].
+    #[must_use]
+    pub fn is_none(&self) -> bool {
+        *self == Self::None
+    }
+
+    /// The turned frame's width and height for a `width × height` frame.
+    #[must_use]
+    pub fn dimensions(self, width: u32, height: u32) -> (u32, u32) {
+        match self {
+            Self::None | Self::Half => (width, height),
+            Self::Cw90 | Self::Ccw90 => (height, width),
+        }
+    }
+
+    /// Where pixel `(x, y)` of a `width × height` frame lands in the turned
+    /// frame.
+    fn pixel(self, x: u32, y: u32, width: u32, height: u32) -> (u32, u32) {
+        match self {
+            Self::None => (x, y),
+            Self::Cw90 => (height - 1 - y, x),
+            Self::Half => (width - 1 - x, height - 1 - y),
+            Self::Ccw90 => (y, width - 1 - x),
+        }
+    }
+
+    /// Where the point `(x, y)` of a `width × height` frame lands in the
+    /// turned frame (pixel centres at integer coordinates, as keypoints
+    /// are).
+    #[cfg(test)]
+    pub(crate) fn point(self, x: f64, y: f64, width: u32, height: u32) -> (f64, f64) {
+        let (w, h) = (f64::from(width) - 1.0, f64::from(height) - 1.0);
+        match self {
+            Self::None => (x, y),
+            Self::Cw90 => (h - y, x),
+            Self::Half => (w - x, h - y),
+            Self::Ccw90 => (y, w - x),
+        }
+    }
+}
+
+impl serde::Serialize for Rotation {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> std::result::Result<S::Ok, S::Error> {
+        s.serialize_u16(self.degrees())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Rotation {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
+        let degrees = u16::deserialize(d)?;
+        Self::from_degrees(degrees).ok_or_else(|| {
+            serde::de::Error::custom(format!("rotation {degrees}: expected 0, 90, 180 or 270"))
+        })
+    }
 }
 
 /// Decodes a JPEG (an MJPEG frame as a camera sent it, with or without
@@ -169,9 +307,21 @@ impl DecodeBudget {
         }
     }
 
-    /// Decodes `jpeg` (as [`decode_jpeg`]) once its image fits the budget.
-    pub(crate) fn decode(&self, jpeg: &[u8]) -> Result<Budgeted<'_>> {
-        let (image, grant) = decode_reserving(jpeg, |bytes| self.take(bytes))?;
+    /// Decodes `jpeg` (as [`decode_jpeg`]) and turns it by `rotation` once
+    /// its image fits the budget. A quarter turn copies the image, so it
+    /// reserves room for two.
+    pub(crate) fn decode(&self, jpeg: &[u8], rotation: Rotation) -> Result<Budgeted<'_>> {
+        let copies = match rotation {
+            Rotation::Cw90 | Rotation::Ccw90 => 2,
+            Rotation::None | Rotation::Half => 1,
+        };
+        let (mut image, grant) =
+            decode_reserving(jpeg, |bytes| self.take(bytes.saturating_mul(copies)))?;
+        match rotation {
+            Rotation::None => {}
+            Rotation::Half => image.rotate_half(),
+            Rotation::Cw90 | Rotation::Ccw90 => image = image.rotated(rotation),
+        }
         Ok(Budgeted {
             image,
             _grant: grant,
@@ -488,7 +638,7 @@ mod tests {
             for _ in 0..4 {
                 s.spawn(|| {
                     for _ in 0..20 {
-                        let img = budget.decode(&frame).unwrap();
+                        let img = budget.decode(&frame, Rotation::None).unwrap();
                         assert_eq!(img.width(), 16);
                         assert!(*budget.free.lock().unwrap() <= 10);
                     }
@@ -498,11 +648,98 @@ mod tests {
         assert_eq!(*budget.free.lock().unwrap(), one + 10);
         // Truncated frames (decoded or not) return their bytes; an image
         // larger than the whole budget still decodes, alone.
-        let _ = budget.decode(&frame[..frame.len() / 2]);
+        let _ = budget.decode(&frame[..frame.len() / 2], Rotation::None);
         assert_eq!(*budget.free.lock().unwrap(), one + 10);
         let small = DecodeBudget::new(8);
-        assert_eq!(small.decode(&frame).unwrap().height(), 16);
+        assert_eq!(small.decode(&frame, Rotation::None).unwrap().height(), 16);
         assert_eq!(*small.free.lock().unwrap(), 8);
+    }
+
+    /// A 4 × 3 image whose pixel `(x, y)` is `[x, y, 10x + y]`.
+    fn numbered() -> Image {
+        let mut data = Vec::new();
+        for y in 0..3u8 {
+            for x in 0..4u8 {
+                data.extend_from_slice(&[x, y, 10 * x + y]);
+            }
+        }
+        Image::new(4, 3, data).unwrap()
+    }
+
+    /// Where a source pixel lands.
+    type Landing = fn(u32, u32) -> (u32, u32);
+
+    #[test]
+    fn rotation_moves_every_pixel() {
+        let img = numbered();
+        // Where the source pixel (x, y) lands, written out per turn.
+        let cases: [(Rotation, (u32, u32), Landing); 4] = [
+            (Rotation::None, (4, 3), |x, y| (x, y)),
+            (Rotation::Cw90, (3, 4), |x, y| (2 - y, x)),
+            (Rotation::Half, (4, 3), |x, y| (3 - x, 2 - y)),
+            (Rotation::Ccw90, (3, 4), |x, y| (y, 3 - x)),
+        ];
+        for (rotation, dims, to) in cases {
+            let out = img.rotated(rotation);
+            assert_eq!((out.width(), out.height()), dims, "{rotation:?}");
+            assert_eq!(rotation.dimensions(4, 3), dims);
+            for y in 0..3 {
+                for x in 0..4 {
+                    let (u, v) = to(x, y);
+                    assert_eq!(out.pixel(u, v), img.pixel(x, y), "{rotation:?} ({x}, {y})");
+                    let p = rotation.point(f64::from(x), f64::from(y), 4, 3);
+                    assert_eq!(p, (f64::from(u), f64::from(v)));
+                }
+            }
+        }
+        // The top-left pixel goes to the top-right corner on a clockwise
+        // quarter turn.
+        assert_eq!(img.rotated(Rotation::Cw90).pixel(2, 0), Some([0, 0, 0]));
+        // Four quarter turns, or two half turns, are the identity.
+        let mut round = img.clone();
+        for _ in 0..4 {
+            round = round.rotated(Rotation::Cw90);
+        }
+        assert_eq!(round, img);
+        assert_eq!(img.rotated(Rotation::Cw90).rotated(Rotation::Ccw90), img);
+        let mut half = img.clone();
+        half.rotate_half();
+        assert_eq!(half, img.rotated(Rotation::Half));
+    }
+
+    #[test]
+    fn rotation_degrees_and_json() {
+        for (r, d) in [
+            (Rotation::None, 0),
+            (Rotation::Cw90, 90),
+            (Rotation::Half, 180),
+            (Rotation::Ccw90, 270),
+        ] {
+            assert_eq!(r.degrees(), d);
+            assert_eq!(Rotation::from_degrees(d), Some(r));
+            assert_eq!(serde_json::to_string(&r).unwrap(), d.to_string());
+            assert_eq!(serde_json::from_str::<Rotation>(&d.to_string()).unwrap(), r);
+        }
+        assert_eq!(Rotation::default(), Rotation::None);
+        assert_eq!(Rotation::from_degrees(45), None);
+        assert!(serde_json::from_str::<Rotation>("45").is_err());
+        assert!(serde_json::from_str::<Rotation>("\"cw90\"").is_err());
+    }
+
+    #[test]
+    fn a_quarter_turn_decodes_within_the_budget() {
+        let frame = jpeg(16, 8);
+        let one = 16 * 8 * 3;
+        let budget = DecodeBudget::new(4 * one);
+        let img = budget.decode(&frame, Rotation::Cw90).unwrap();
+        assert_eq!((img.width(), img.height()), (8, 16));
+        // Room for the decoded frame and its turned copy.
+        assert_eq!(*budget.free.lock().unwrap(), 2 * one);
+        let half = budget.decode(&frame, Rotation::Half).unwrap();
+        assert_eq!((half.width(), half.height()), (16, 8));
+        assert_eq!(*budget.free.lock().unwrap(), one);
+        drop((img, half));
+        assert_eq!(*budget.free.lock().unwrap(), 4 * one);
     }
 
     #[test]

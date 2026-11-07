@@ -3,7 +3,8 @@
 //! ```text
 //! cargo run --release --example golf_report --features pose -- <models dir> <clip.avi> \
 //!     [--view fo|dtl] [--handed r|l] [--impact-ns N | --estimate-impact] [--height-cm H] \
-//!     [--mirrored] [--track <clip.pose.json>] [--render <out dir>] [--suffix TEXT] [--json]
+//!     [--mirrored] [--rotate 0|90|180|270] [--track <clip.pose.json>] [--render <out dir>] \
+//!     [--suffix TEXT] [--grade driver|iron|wedge [male|female] [tour|amateur]] [--json]
 //! ```
 //!
 //! Runs the offline pose pass on the clip (or reads `--track`), then
@@ -11,11 +12,17 @@
 //! from the clip's sidecar unless `--impact-ns` (ns from the first frame)
 //! or `--estimate-impact` says otherwise; the view is guessed unless
 //! `--view` gives it. `--mirrored` says the clip is a mirrored image
-//! (`--handed` is then the golfer's true hand). `--json` prints the report
-//! as JSON instead.
+//! (`--handed` is then the golfer's true hand). `--rotate` turns every frame
+//! clockwise by that many degrees before the pose pass, for a camera on its
+//! side (a `--track` carries its own rotation). `--grade` grades every
+//! metric and the tempo against the built-in bands (`stance::golf::norms`)
+//! for the club class, sex (default male) and reference (default tour), and
+//! prints each graded number with its band, z, fit and words. `--json`
+//! prints the report as JSON instead (with `--grade`, an object with the
+//! `report` and its `grades`).
 //!
 //! `--render <out dir>` writes `<clip><suffix>.swing.json` there and a JPEG
-//! still at each event (`<clip><suffix>-<event>.jpg`) with the smoothed
+//! still at each event (`<clip><suffix>-<event>.jpg`, on the turned frame) with the smoothed
 //! skeleton (the person's left side cyan, right orange), the hands' path so
 //! far in yellow and the event's numbers.
 
@@ -24,12 +31,13 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use stance::golf::norms::NormUnit;
 use stance::golf::{
-    Handed, ImpactSource, MetricId, Positions, Smoothing, SwingEvent, SwingOptions, SwingReport,
-    Unit, View, analyze_swing, smooth_track,
+    ClubClass, Context, Grade, Handed, ImpactSource, MetricId, Norms, Positions, Reference, Sex,
+    Smoothing, SwingEvent, SwingOptions, SwingReport, Unit, View, analyze_swing, smooth_track,
 };
 use stance::pose::{
-    Image, PoseConfig, PoseFrame, PoseModels, PoseTrack, analyze_clip, decode_jpeg, draw,
+    Image, PoseConfig, PoseFrame, PoseModels, PoseTrack, Rotation, analyze_clip, decode_jpeg, draw,
 };
 
 /// The hands' path.
@@ -52,16 +60,19 @@ struct Args {
     estimate_impact: bool,
     height_cm: Option<f64>,
     mirrored: bool,
+    rotation: Rotation,
     track: Option<PathBuf>,
     render: Option<PathBuf>,
     suffix: String,
+    grade: Option<Context>,
     json: bool,
 }
 
 fn usage() -> String {
     "usage: golf_report <models dir> <clip.avi> [--view fo|dtl] [--handed r|l] \
-     [--impact-ns N | --estimate-impact] [--height-cm H] [--mirrored] [--track FILE] [--render DIR] \
-     [--suffix TEXT] [--json]"
+     [--impact-ns N | --estimate-impact] [--height-cm H] [--mirrored] [--rotate 0|90|180|270] \
+     [--track FILE] [--render DIR] [--suffix TEXT] \
+     [--grade driver|iron|wedge [male|female] [tour|amateur]] [--json]"
         .into()
 }
 
@@ -76,12 +87,14 @@ fn parse_args() -> Result<Args, String> {
         estimate_impact: false,
         height_cm: None,
         mirrored: false,
+        rotation: Rotation::None,
         track: None,
         render: None,
         suffix: String::new(),
+        grade: None,
         json: false,
     };
-    let mut it = std::env::args().skip(1);
+    let mut it = std::env::args().skip(1).peekable();
     while let Some(a) = it.next() {
         let mut value = || it.next().ok_or_else(usage);
         match a.as_str() {
@@ -102,10 +115,38 @@ fn parse_args() -> Result<Args, String> {
             "--impact-ns" => args.impact_ns = Some(value()?.parse().map_err(|e| format!("{e}"))?),
             "--estimate-impact" => args.estimate_impact = true,
             "--mirrored" => args.mirrored = true,
+            "--rotate" => {
+                let degrees = value()?;
+                args.rotation = degrees
+                    .parse()
+                    .ok()
+                    .and_then(Rotation::from_degrees)
+                    .ok_or_else(|| format!("rotation `{degrees}`: 0, 90, 180 or 270"))?;
+            }
             "--height-cm" => args.height_cm = Some(value()?.parse().map_err(|e| format!("{e}"))?),
             "--track" => args.track = Some(PathBuf::from(value()?)),
             "--render" => args.render = Some(PathBuf::from(value()?)),
             "--suffix" => args.suffix = value()?,
+            "--grade" => {
+                let club = match value()?.as_str() {
+                    "driver" => ClubClass::Driver,
+                    "iron" | "mid_iron" | "mid-iron" => ClubClass::MidIron,
+                    "wedge" => ClubClass::Wedge,
+                    other => return Err(format!("unknown club class `{other}`")),
+                };
+                let mut ctx = Context::new(club, Sex::Male, Reference::Tour);
+                while let Some(word) = it.peek() {
+                    match word.as_str() {
+                        "male" => ctx.sex = Sex::Male,
+                        "female" => ctx.sex = Sex::Female,
+                        "tour" => ctx.reference = Reference::Tour,
+                        "amateur" => ctx.reference = Reference::Amateur,
+                        _ => break,
+                    }
+                    it.next();
+                }
+                args.grade = Some(ctx);
+            }
             "--json" => args.json = true,
             "-h" | "--help" => return Err(usage()),
             _ => positional.push(PathBuf::from(a)),
@@ -199,7 +240,9 @@ fn print_report(stem: &str, r: &SwingReport) {
     for (name, ev) in [
         ("address", e.address),
         ("takeaway", e.takeaway),
+        ("P3", e.arm_parallel_back),
         ("top", e.top),
+        ("P5", e.arm_parallel_down),
         ("impact", e.impact),
         ("finish", e.finish),
     ] {
@@ -227,23 +270,81 @@ fn print_report(stem: &str, r: &SwingReport) {
             r.series.t_ns.len()
         ));
     }
-    say(&format!(
-        "  {:20} {:>22} {:>22} {:>22} {:>22}  conf",
-        "metric", "address", "top", "impact", "finish"
-    ));
+    let mut header = format!("  {:20}", "metric");
+    for name in POSITIONS {
+        let _ = write!(header, " {name:>22}");
+    }
+    say(&format!("{header}  conf"));
     for m in &r.metrics {
-        let cell = |v: Option<f64>, cm: Option<f64>| {
-            v.map_or_else(|| "-".to_owned(), |v| format_value(m.unit, v, cm))
-        };
         let cm = m.cm.unwrap_or_default();
+        let mut line = format!("  {:20}", metric_name(m.id));
+        for name in POSITIONS {
+            let cell = pick(m.values, name).map_or_else(
+                || "-".to_owned(),
+                |v| format_value(m.unit, v, pick(cm, name)),
+            );
+            let _ = write!(line, " {cell:>22}");
+        }
+        say(&format!("{line}  {:.2}", m.confidence));
+    }
+}
+
+fn position_name(p: stance::golf::Position) -> &'static str {
+    use stance::golf::Position;
+    match p {
+        Position::Address => "address",
+        Position::ArmParallelBack => "P3",
+        Position::Top => "top",
+        Position::ArmParallelDown => "P5",
+        Position::Impact => "impact",
+        Position::Finish => "finish",
+        _ => "swing",
+    }
+}
+
+fn unit_suffix(unit: NormUnit) -> &'static str {
+    match unit {
+        NormUnit::Degrees => "°",
+        NormUnit::Inches => " in",
+        NormUnit::Seconds => " s",
+        _ => "",
+    }
+}
+
+fn print_grades(ctx: &Context, grades: &[Grade]) {
+    say(&format!(
+        "  grades against {:?} {:?} {:?} bands:",
+        ctx.reference, ctx.club, ctx.sex
+    ));
+    say(&format!(
+        "  {:20} {:8} {:>9} {:>20} {:>7} {:>13}  {:5}  words",
+        "metric", "at", "value", "band", "z", "z fade/draw", "fit"
+    ));
+    for g in grades {
+        let u = unit_suffix(g.unit);
+        let mut band = format!("{:.1} ± {:.1}{u}", g.centre, g.sd);
+        if let (Some(f), Some(d)) = (g.fade, g.draw) {
+            band = format!("{:.1}/{:.1} ± {:.1}{u}", f.centre, d.centre, g.sd);
+        }
+        let shape = match (g.z_fade, g.z_draw) {
+            (Some(f), Some(d)) => format!("{f:+.2}/{d:+.2}"),
+            _ => "-".to_owned(),
+        };
+        let mut flags = String::new();
+        if g.club_fallback {
+            flags.push_str(" (mid-iron band)");
+        }
+        if g.sex_fallback {
+            flags.push_str(" (male band)");
+        }
         say(&format!(
-            "  {:20} {:>22} {:>22} {:>22} {:>22}  {:.2}",
-            metric_name(m.id),
-            cell(m.values.address, cm.address),
-            cell(m.values.top, cm.top),
-            cell(m.values.impact, cm.impact),
-            cell(m.values.finish, cm.finish),
-            m.confidence
+            "  {:20} {:8} {:>9} {band:>20} {:>+7.2} {shape:>13}  {:5}  {}{flags}",
+            g.metric.name(),
+            position_name(g.position),
+            format!("{:+.1}{u}", g.value),
+            g.z,
+            format!("{:?}", g.fit),
+            g.fit_word().unwrap_or_default(),
         ));
     }
 }
@@ -268,10 +369,15 @@ fn hands(frame: &PoseFrame, handed: Handed) -> Option<(f32, f32)> {
     (a.score > 0.0 && b.score > 0.0).then(|| (f32::midpoint(a.x, b.x), f32::midpoint(a.y, b.y)))
 }
 
+/// The key positions, in swing order.
+const POSITIONS: [&str; 6] = ["address", "P3", "top", "P5", "impact", "finish"];
+
 fn pick(values: Positions, event: &str) -> Option<f64> {
     match event {
         "address" => values.address,
+        "P3" => values.arm_parallel_back,
         "top" => values.top,
+        "P5" => values.arm_parallel_down,
         "impact" => values.impact,
         "finish" => values.finish,
         _ => None,
@@ -306,13 +412,17 @@ fn render(
     }
     for (event, ev) in [
         ("address", e.address),
+        ("P3", e.arm_parallel_back),
         ("top", e.top),
+        ("P5", e.arm_parallel_down),
         ("impact", e.impact),
         ("finish", e.finish),
     ] {
         let Some(ev) = ev else { continue };
         let jpeg = avi.read_frame(ev.frame).map_err(|e| e.to_string())?;
-        let mut img = decode_jpeg(&jpeg).map_err(|e| e.to_string())?;
+        let mut img = decode_jpeg(&jpeg)
+            .map_err(|e| e.to_string())?
+            .rotated(track.rotation);
         let style = draw::SkeletonStyle {
             fade: false,
             ..draw::SkeletonStyle::for_image(&img)
@@ -369,7 +479,10 @@ fn run() -> Result<(), String> {
     let track = if let Some(path) = &args.track {
         PoseTrack::read(path).map_err(|e| e.to_string())?
     } else {
-        let config = PoseConfig::default();
+        let config = PoseConfig {
+            rotation: args.rotation,
+            ..PoseConfig::default()
+        };
         let models = PoseModels::load(&args.models, &config).map_err(|e| e.to_string())?;
         analyze_clip(&models, &args.clip, &config).map_err(|e| e.to_string())?
     };
@@ -391,10 +504,29 @@ fn run() -> Result<(), String> {
         },
     )
     .map_err(|e| e.to_string())?;
-    if args.json {
-        say(&report.to_json().map_err(|e| e.to_string())?);
-    } else {
-        print_report(&stem, &report);
+    let grades = match &args.grade {
+        Some(ctx) => {
+            let norms = Norms::builtin().map_err(|e| e.to_string())?;
+            let mut grades = norms.grade_report(&report, ctx);
+            if let Some(t) = &report.tempo {
+                grades.extend(norms.grade_tempo(t, ctx));
+            }
+            Some((ctx, grades))
+        }
+        None => None,
+    };
+    match (&grades, args.json) {
+        (None, true) => say(&report.to_json().map_err(|e| e.to_string())?),
+        (Some((_, grades)), true) => {
+            let value = serde_json::json!({ "report": report, "grades": grades });
+            say(&serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?);
+        }
+        (_, false) => {
+            print_report(&stem, &report);
+            if let Some((ctx, grades)) = &grades {
+                print_grades(ctx, grades);
+            }
+        }
     }
     if let Some(out) = &args.render {
         render(&args, &stem, &track, &report, out)?;

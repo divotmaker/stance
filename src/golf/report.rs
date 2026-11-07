@@ -21,7 +21,7 @@ use crate::{Error, Result};
 pub const SWING_REPORT_VERSION: u32 = 1;
 
 /// The largest swing report [`SwingReport::read`] accepts (bytes); a
-/// report with its [`Series`] is tens of kilobytes (about 100 bytes per
+/// report with its [`Series`] is tens of kilobytes (about 130 bytes per
 /// frame face-on).
 pub const MAX_SWING_REPORT_BYTES: u64 = 4 << 20;
 
@@ -79,11 +79,13 @@ impl Default for SwingOptions {
 ///   "view_guess": { "value": "face_on", "confidence": 0.8 },
 ///   "handed_guess": { "value": "right", "confidence": 1.0 },
 ///   "smoothing": { "min_score": 0.3, "max_gap_ns": 150000000, "cutoff_hz": 8.0, "order": 2 },
-///   "scale": { "torso_px": 200.0, "cm_per_px": 0.25 },
+///   "scale": { "torso_px": 200.0, "upright_px": 230.0, "cm_per_px": 0.22 },
 ///   "events": {
 ///     "address": { "t_ns": 1000000000, "frame": 120, "confidence": 0.8 },
 ///     "takeaway": { "t_ns": 1008333333, "frame": 121, "confidence": 0.8 },
+///     "arm_parallel_back": { "t_ns": 1560000000, "frame": 187, "confidence": 0.9 },
 ///     "top": { "t_ns": 1850000000, "frame": 222, "confidence": 0.9 },
+///     "arm_parallel_down": { "t_ns": 2050000000, "frame": 246, "confidence": 0.9 },
 ///     "impact": { "t_ns": 2150000000, "frame": 258, "confidence": 0.9 },
 ///     "impact_source": "refined",
 ///     "finish": { "t_ns": 2800000000, "frame": 336, "confidence": 0.7 }
@@ -91,7 +93,8 @@ impl Default for SwingOptions {
 ///   "tempo": { "backswing_ns": 841666667, "downswing_ns": 300000000, "ratio": 2.81 },
 ///   "metrics": [
 ///     { "id": "hip_sway", "view": "face_on", "unit": "torso",
-///       "values": { "top": -0.05, "impact": 0.12 }, "cm": { "top": -2.5, "impact": 6.0 },
+///       "values": { "arm_parallel_back": -0.04, "top": -0.05, "arm_parallel_down": 0.05, "impact": 0.12 },
+///       "cm": { "arm_parallel_back": -2.0, "top": -2.5, "arm_parallel_down": 2.5, "impact": 6.0 },
 ///       "confidence": 0.8 },
 ///     { "id": "lead_arm_angle", "view": "face_on", "unit": "degrees",
 ///       "values": { "address": 175.0, "top": 150.0, "impact": 176.0 }, "confidence": 0.8 }
@@ -108,7 +111,9 @@ impl Default for SwingOptions {
 ///
 /// Reading skips metrics (and series) with an id this crate doesn't know
 /// (written by a later version), so new metrics don't need a new format
-/// version; a report without `series` reads with an empty one.
+/// version; a report without `series` reads with an empty one, and one
+/// without the lead-arm-parallel events and positions or
+/// `scale.upright_px` reads with them `None`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct SwingReport {
@@ -203,8 +208,8 @@ fn unmirror_track(track: &PoseTrack) -> PoseTrack {
 ///    events are found.
 /// 5. The view is guessed from the address pose when not given, and
 ///    handedness is checked.
-/// 6. The view's metrics are measured at address, top, impact and finish
-///    ([`MetricId`]), and at every frame ([`Series`]).
+/// 6. The view's metrics are measured at address, P3, top, P5, impact and
+///    finish ([`MetricId`]), and at every frame ([`Series`]).
 ///
 /// # Errors
 ///
@@ -242,7 +247,9 @@ pub fn analyze_swing(track: &PoseTrack, options: &SwingOptions) -> Result<SwingR
     }
     let keys = KeyFrames {
         address: events.address.map(|e| e.frame),
+        arm_parallel_back: events.arm_parallel_back.map(|e| e.frame),
         top: events.top.map(|e| e.frame),
+        arm_parallel_down: events.arm_parallel_down.map(|e| e.frame),
         impact: events.impact.map(|e| e.frame),
         finish: events.finish.map(|e| e.frame),
     };

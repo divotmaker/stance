@@ -125,6 +125,9 @@ pub use storage::{ClipFiles, open_clip, read_sidecar, write_clip};
 #[cfg(not(target_family = "wasm"))]
 pub use test_pattern::{TEST_PATTERN_ID, TEST_PATTERN_NAME, TestPattern, TestPatternConfig};
 
+/// This crate's version, e.g. for recording which `stance` analysed a clip.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Compiles the README's examples as doctests.
 #[cfg(doctest)]
 #[doc = include_str!("../README.md")]

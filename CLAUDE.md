@@ -11,7 +11,7 @@ in ML or protocol dependencies.
 
 | Path | Contents |
 |---|---|
-| `src/lib.rs` | Crate docs, module list, re-exports, target gating |
+| `src/lib.rs` | Crate docs, module list, re-exports, `VERSION`, target gating |
 | `src/error.rs` | `Error` (thiserror), `Result` |
 | `src/frame.rs` | `Frame`, `Format` |
 | `src/camera/mod.rs` | `CameraInfo`, `UsbId`, controls, `FormatRequest`, `choose_format`, `list`, `open`, `Camera`, the registry of cameras open in this process |
@@ -29,33 +29,36 @@ in ML or protocol dependencies.
 | `src/jpeg.rs` | `ensure_huffman` (all targets) |
 | `src/clock.rs` | `now_ns` (QPC / `CLOCK_MONOTONIC`) |
 | `src/frp.rs` | `frp` feature: FRP `shot_trigger` → `Trigger<ShotKey>` |
-| `src/pose/mod.rs` | `pose` feature: module docs, `Keypoint`, `Pose`, `PoseEngine`/`PersonDetector` traits (with `fork`), `PoseConfig`, `PoseModels<P, D>`, the crop-collapse rule |
-| `src/pose/image.rs` | `Image`, `decode_jpeg`, the decode budget, the affine-warp and letterbox tensor builders |
+| `src/pose/mod.rs` | `pose` feature: module docs, `Keypoint`, `Pose`, `PoseEngine`/`PersonDetector` traits (with `fork`), `PoseConfig` (incl. `rotation`), `PoseModels<P, D>`, the crop-collapse rule |
+| `src/pose/image.rs` | `Image` (incl. `rotated`), `Rotation` (quarter turns, degrees in JSON), `decode_jpeg`, the decode budget (decodes and turns), the affine-warp and letterbox tensor builders |
 | `src/pose/geometry.rs` | `BBox`, `Detection`, affine transforms, rtmlib's box → crop, NMS |
 | `src/pose/skeleton.rs` | `Skeleton` (Halpe-26 tables: names, bones, left/right pairs, mirror), `Side` |
 | `src/pose/model.rs` | `ModelSpec` table (URL, zip member, SHA-256, size, input), hash verification |
 | `src/pose/runtime.rs` | The inference seam: the only file that uses tract (`Network`, `Session`, `InferencePool`) |
 | `src/pose/rtmpose.rs` | `RtmPose` (crop, normalise, SimCC decode, inverse warp) |
 | `src/pose/yolox.rs` | `Yolox` (letterbox, grid decode, person NMS) |
-| `src/pose/tracker.rs` | `PoseTracker` (single golfer, detect every N frames, IoU identity, One Euro) |
+| `src/pose/tracker.rs` | `PoseTracker` (single golfer, frames turned by `PoseConfig::rotation`, detect every N frames, IoU identity, One Euro) |
 | `src/pose/clip.rs` | `analyze_clip`/`analyze_frames` (parallel key-frame detection and pose, sequential fix-up, low-score poses dropped), `WorkerHook` (`PoseConfig::on_worker_start`, run first on every worker thread) |
-| `src/pose/track.rs` | `PoseTrack` JSON (`<clip>.pose.json`) |
+| `src/pose/track.rs` | `PoseTrack` JSON (`<clip>.pose.json`, `rotation` written only when not 0) |
 | `src/pose/filter.rs` | `OneEuro`, zero-phase `Butterworth` |
 | `src/pose/download.rs` | `pose-download` feature: `fetch_model` / `fetch_model_with` (optional `FetchProgress` callback and cancel flag, `Error::Cancelled`) (ureq, HTTPS only, timeouts, per-process temporary files, zip member extraction) |
 | `src/pose/draw.rs` | `pose::draw`: blended lines and discs, skeletons, the 5×7 label font (used by the examples) |
 | `src/golf/mod.rs` | `pose` feature: golf swing analysis, module docs and re-exports |
 | `src/golf/body.rs` | `View`, `Handed`, `Joint` (lead/trail over Halpe-26), `Setup` (image directions), 2D geometry |
 | `src/golf/smooth.rs` | `Smoothing`, gap filling and impact-split Butterworth, `smooth_track` |
-| `src/golf/events.rs` | `SwingEvents` from the hands (impact refined from a given time or estimated, top at the downswing onset, address, takeaway, finish), `Tempo` |
-| `src/golf/metrics.rs` | `MetricId` (definitions table, incl. the one-camera turn estimates), `Metric`, `Positions`, `Series`/`MetricSeries` (every metric per frame), `Unit`, `BodyScale`; one definition per metric serves its positions and its series |
+| `src/golf/events.rs` | `SwingEvents` from the hands (impact refined from a given time or estimated, top at the downswing onset, address, takeaway, lead arm parallel back/down (P3: the last rise through the lead shoulder's height at least a frame before the top; P5: the first fall at least a frame after it), finish), `Tempo` |
+| `src/golf/metrics.rs` | `MetricId` (definitions table, incl. the line solve: hip/shoulder tilt and turn from one camera), `Metric`, `Positions` (address, P3, top, P5, impact, finish), `Series`/`MetricSeries` (every metric per frame), `Unit`, `BodyScale` (incl. `upright_px`); one definition per metric serves its positions and its series |
 | `src/golf/posture.rs` | Live `posture`, `HeadShift`, `PostureFilter` (One Euro), `unmirror` |
 | `src/golf/view.rs` | `guess_view`, the handedness check, `Guess` |
+| `src/golf/norms.rs` | `golf::norms`: `Norms` (built-in table, `from_json` skipping unknown rows, `from_bands`), `Band`, lookup with sex/club fallbacks, `grade`/`grade_report`/`grade_tempo` → `Grade` (`Fit` Both/Fade/Draw/Near/Far, `Side`, `Miss`, `fit_word`), one-camera turn rules, inch scaling (measured or assumed height) |
+| `src/golf/norms/tour.json` | The built-in band table (versioned JSON, `include_str!`): tour and amateur bands with sources, SD source, confidence, miss words; `"grade": false` rows are references only |
 | `src/golf/report.rs` | `analyze_swing`, `SwingOptions` (incl. mirrored images), `SwingReport` JSON (`<clip>.swing.json`, per-frame `series`, unknown metrics skipped, bounded read) |
-| `src/golf/tests.rs` | Synthetic swings (a parametric stick figure): events, tempo, metric formulas, per-frame series, turn estimates, mirror symmetry, gaps, JSON; robustness: offset impact, unconfirmed given impact, practice swing, hands high at the start, drifting hold at the top, clip starting at address, gap over the top, mirrored image |
+| `src/golf/tests.rs` | Synthetic swings (a parametric stick figure with physical tilt and turn per body line): events incl. P3/P5, tempo, metric formulas and signs for either hand, per-frame series, the line solve, mirror symmetry, gaps, JSON (incl. reading older reports), the line solve through a pinhole camera, a portrait camera through `Rotation`; robustness: offset impact, unconfirmed given impact, practice swing, hands high at the start, drifting hold at the top, clip starting at address, gap over the top, mirrored image, a P3 glitch early in the backswing, hands hovering at shoulder height over the top; norms: the built-in table (known ids, units, sources, the four shape-linked quantities), the fit table, overlapping shape bands, one-sided bands, personal sub-bands, unknown rows, lookup fallbacks, inch scaling, one-camera turn signs, low confidence, tempo, a tour figure grading Both (both hands) and one fault figure per miss direction, `docs/NORMS.md` in step with the table |
 | `examples/frp_record.rs` | FRP WebSocket client writing a clip per shot |
 | `examples/pose_bench.rs` | Pose latency, clip-pass time, scores per body part, impact scores, L/R swaps over clips |
 | `examples/pose_render.rs` | Draws a clip's pose track onto its frames (AVI + sidecar, `.pose.json`, stills) |
-| `examples/golf_report.rs` | Swing report for a clip; `--render` writes `.swing.json` and annotated stills per event |
+| `examples/golf_report.rs` | Swing report for a clip; `--rotate` for a camera on its side; `--grade` against the built-in bands; `--render` writes `.swing.json` and annotated stills per event |
+| `docs/NORMS.md` | The band rule, signs, one-camera turn rules, limits, data-file format and every built-in band with its sources (its tables mirror `tour.json`; a test checks every row is there) |
 | `tests/end_to_end.rs` | Test pattern → capture → recorder → files → playback |
 | `tests/hostile_files.rs` | Corrupt/truncated AVIs and sidecars; a tracking allocator proves no allocation follows an untrusted size |
 | `tests/pose_models.rs` | `pose` with real models (only when `STANCE_MODEL_DIR` is set): rtmlib parity, detector, clip pass, live tracker |
@@ -77,7 +80,9 @@ There are no default features. The wasm build is
 ## Design rules
 
 - Frames are stored as the camera sent them. No decode or re-encode on the
-  capture path; `ensure_huffman` is for consumers that decode.
+  capture path; `ensure_huffman` is for consumers that decode. A camera
+  mounted on its side is handled on decode (`PoseConfig::rotation`), never
+  by rewriting the clip.
 - The ring is the only buffer between the capture thread and consumers. No
   unbounded channels anywhere.
 - `ClipRecorder` stays pure: no threads, no clock reads, deterministic tests.
@@ -115,6 +120,10 @@ There are no default features. The wasm build is
 - `golf` is pure math on keypoints: no models, no I/O beyond its JSON.
   Metrics are 2D, per view, and documented as proxies; lead/trail mapping
   keeps left-handers an exact mirror of right-handers.
+- `golf::norms` returns fits, never colours, and never needs the player's
+  target shape. Band numbers live in `norms/tour.json`, not in code; public
+  docs cite them as published tour averages by source. A change to the
+  table updates `docs/NORMS.md`'s tables in the same change.
 
 ## Rust conventions
 

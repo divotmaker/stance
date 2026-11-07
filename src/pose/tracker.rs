@@ -12,6 +12,9 @@ const MIN_AREA_FRACTION: f32 = 0.005;
 
 /// Tracks a single golfer for a live view.
 ///
+/// Frames are turned by [`PoseConfig::rotation`] first, so a camera on its
+/// side gives an upright golfer, as in the clip pass.
+///
 /// The detector runs on the first frame, every
 /// [`PoseConfig::detect_every`] frames and whenever tracking is lost; in
 /// between, the crop comes from the previous frame's keypoints (rtmlib's
@@ -80,6 +83,10 @@ impl<P: PoseEngine, D: PersonDetector> PoseTracker<P, D> {
     /// The golfer's pose in this frame, `None` when nobody is found or the
     /// pose scores below [`PoseConfig::min_pose_score`].
     ///
+    /// `image` is the frame as the camera sent it: the tracker first turns
+    /// it by [`PoseConfig::rotation`], as the clip pass does, so the pose's
+    /// keypoints are in the upright frame.
+    ///
     /// `t_ns` is the frame's time (any monotonic nanosecond clock); it only
     /// drives the optional smoothing.
     ///
@@ -87,6 +94,16 @@ impl<P: PoseEngine, D: PersonDetector> PoseTracker<P, D> {
     ///
     /// [`Error::Model`](crate::Error::Model) if inference fails.
     pub fn track(&mut self, image: &Image, t_ns: u64) -> Result<Option<Pose>> {
+        if self.config.rotation.is_none() {
+            self.track_upright(image, t_ns)
+        } else {
+            let upright = image.rotated(self.config.rotation);
+            self.track_upright(&upright, t_ns)
+        }
+    }
+
+    /// [`PoseTracker::track`] on a frame that is already upright.
+    fn track_upright(&mut self, image: &Image, t_ns: u64) -> Result<Option<Pose>> {
         let every = self.config.detect_every.max(1);
         let detect_due =
             self.target.is_none() || self.redetect || self.frames_since_detect >= every;
@@ -216,7 +233,7 @@ mod tests {
     use std::collections::VecDeque;
 
     use super::*;
-    use crate::pose::{Keypoint, Skeleton};
+    use crate::pose::{Keypoint, Rotation, Skeleton};
 
     fn det(x1: f32, y1: f32, x2: f32, y2: f32, score: f32) -> Detection {
         Detection {
@@ -443,6 +460,121 @@ mod tests {
         );
         assert!(t.track(&image(), 0).unwrap().is_none());
         assert!(t.pose.boxes.is_empty());
+    }
+
+    /// A detector and pose engine that find the one bright pixel block and
+    /// record the size of every image they see.
+    #[derive(Default)]
+    struct Blob {
+        sizes: Vec<(u32, u32)>,
+    }
+
+    impl Blob {
+        fn centre(&mut self, image: &Image) -> (f32, f32) {
+            self.sizes.push((image.width(), image.height()));
+            let (mut sx, mut sy, mut n) = (0.0f32, 0.0f32, 0.0f32);
+            for y in 0..image.height() {
+                for x in 0..image.width() {
+                    if image.pixel(x, y).unwrap()[0] > 128 {
+                        // Test images are small.
+                        #[allow(clippy::cast_precision_loss)]
+                        {
+                            sx += x as f32;
+                            sy += y as f32;
+                        }
+                        n += 1.0;
+                    }
+                }
+            }
+            (sx / n, sy / n)
+        }
+    }
+
+    impl PoseEngine for Blob {
+        fn skeleton(&self) -> Skeleton {
+            Skeleton::Halpe26
+        }
+        fn model_name(&self) -> &'static str {
+            "blob"
+        }
+        fn fork(&self) -> Result<Self> {
+            Ok(Self::default())
+        }
+        fn estimate(&mut self, image: &Image, bbox: &BBox) -> Result<Pose> {
+            let (x, y) = self.centre(image);
+            let kps = (0..26u8)
+                .map(|i| Keypoint {
+                    x: x + f32::from(i % 3),
+                    y: y + f32::from(i / 3),
+                    score: 0.9,
+                })
+                .collect();
+            Ok(Pose::new(Skeleton::Halpe26, kps, *bbox))
+        }
+    }
+
+    impl PersonDetector for Blob {
+        fn model_name(&self) -> &'static str {
+            "blob"
+        }
+        fn fork(&self) -> Result<Self> {
+            Ok(Self::default())
+        }
+        fn detect(&mut self, image: &Image) -> Result<Vec<Detection>> {
+            let (x, y) = self.centre(image);
+            Ok(vec![det(x - 30.0, y - 30.0, x + 30.0, y + 30.0, 0.9)])
+        }
+    }
+
+    #[test]
+    fn the_tracker_turns_frames_by_the_config_rotation() {
+        // An upright 160 × 120 scene with a bright block at (100..110, 20..30).
+        let mut data = vec![0u8; 160 * 120 * 3];
+        for y in 20..30 {
+            for x in 100..110 {
+                let p = (y * 160 + x) * 3;
+                data[p..p + 3].copy_from_slice(&[255, 255, 255]);
+            }
+        }
+        let scene = Image::new(160, 120, data).unwrap();
+        let mut upright = PoseTracker::new(Blob::default(), Blob::default(), PoseConfig::default());
+        let want = upright.track(&scene, 0).unwrap().unwrap();
+        assert!((want.keypoints[0].x - 104.5).abs() < 1e-3);
+        for (rotation, mounted) in [
+            (Rotation::Cw90, Rotation::Ccw90),
+            (Rotation::Half, Rotation::Half),
+            (Rotation::Ccw90, Rotation::Cw90),
+        ] {
+            // A camera mounted turned by `mounted` sends the scene turned
+            // that way; the config's `rotation` turns it back.
+            let sent = scene.rotated(mounted);
+            let mut t = PoseTracker::new(
+                Blob::default(),
+                Blob::default(),
+                PoseConfig {
+                    rotation,
+                    ..PoseConfig::default()
+                },
+            );
+            for i in 0..3 {
+                let pose = t.track(&sent, i).unwrap().unwrap();
+                for (k, w) in pose.keypoints.iter().zip(&want.keypoints) {
+                    assert!(
+                        (k.x - w.x).abs() < 1e-3 && (k.y - w.y).abs() < 1e-3,
+                        "{rotation:?}: {k:?} vs {w:?}"
+                    );
+                }
+            }
+            assert!(t.detector.sizes.iter().all(|&s| s == (160, 120)));
+            assert!(t.pose.sizes.iter().all(|&s| s == (160, 120)));
+            // Without the rotation the models see the sideways frame.
+            let mut raw = PoseTracker::new(Blob::default(), Blob::default(), PoseConfig::default());
+            let pose = raw.track(&sent, 0).unwrap().unwrap();
+            assert_eq!(raw.pose.sizes[0], mounted.dimensions(160, 120));
+            if mounted != Rotation::Half {
+                assert!((pose.keypoints[0].x - want.keypoints[0].x).abs() > 1.0);
+            }
+        }
     }
 
     #[test]

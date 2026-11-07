@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::body::{Joint, Pt};
+use super::body::{Body, Joint, Pt};
 use super::smooth::Frames;
 
 /// A swing event: when it happened and how sure the detector is.
@@ -72,6 +72,24 @@ pub enum ImpactSource {
 ///   its first frame, at reduced confidence (down to half).
 /// - **takeaway**: the frame after address, where the hands leave the rest
 ///   position for good.
+/// - **arm parallel back** (P3) and **arm parallel down** (P5): the lead
+///   arm parallel to the ground, where the lead wrist passes the lead
+///   shoulder's height (in either view: an arm level with the ground has
+///   its wrist at shoulder height from any level camera). P3 is the last
+///   time the wrist rises through it after the takeaway (or the first
+///   frame) and at least one frame before the top, so a pose glitch early in
+///   the clip can't stand in for it; P5 is the first time it falls through
+///   it at least one frame after the top and up to impact, so hands
+///   hovering at shoulder height over the top don't put either on the top
+///   frame. Both are sub-frame (linear between the frames either side).
+///   The lead wrist falls back to the hands and the lead shoulder to the
+///   neck keypoint (between the shoulders) where they are missing, at half
+///   the confidence. `None` when the hands never reach shoulder height (a
+///   chip, a pitch) or there is no top (or, for P5, no impact). On real
+///   swings P5 comes a little before the frame people label "arm parallel"
+///   by eye (a few frames at 120 fps): the arm is moving fast there, and
+///   by the frame that looks parallel the wrist is already below the
+///   shoulder in the image.
 /// - **finish**: after impact, once the hands are above mid-torso and past
 ///   their highest point, the first frame where their speed falls below 3 %
 ///   of the swing's peak hand speed. When they never settle, the highest
@@ -84,7 +102,10 @@ pub enum ImpactSource {
 /// downswing (top → impact) outside 120–700 ms (to 0 at 60 ms and 1 s), a
 /// low point with less than 1 L of swing through it or a slow downswing,
 /// a finish where the hands stay settled (under 6 % of the peak speed) for
-/// less than 0.3 s.
+/// less than 0.3 s. For P3 and P5, it is the wrist's and shoulder's mean
+/// score either side of the crossing, times how clearly the wrist crosses
+/// (at least 0.02 L of height change over that step for full confidence,
+/// so a wrist drifting along the shoulder's height scores low).
 ///
 /// Events missing from the clip (a clip that starts mid-swing, a golfer out
 /// of frame) are `None`, as are all but the impact when it is
@@ -109,8 +130,16 @@ pub struct SwingEvents {
     pub address: Option<SwingEvent>,
     /// The hands start moving.
     pub takeaway: Option<SwingEvent>,
+    /// P3: the lead arm parallel to the ground in the backswing. `None`
+    /// when absent from JSON.
+    #[serde(default)]
+    pub arm_parallel_back: Option<SwingEvent>,
     /// The top of the backswing.
     pub top: Option<SwingEvent>,
+    /// P5: the lead arm parallel to the ground in the downswing. `None`
+    /// when absent from JSON.
+    #[serde(default)]
+    pub arm_parallel_down: Option<SwingEvent>,
     /// Impact.
     pub impact: Option<SwingEvent>,
     /// Where [`SwingEvents::impact`] came from.
@@ -218,6 +247,11 @@ const IMPACT_MIN_CLEAR: f64 = 0.2;
 const IMPACT_MIN_PLAUSIBILITY: f64 = 0.25;
 /// The confidence of a given impact time the hands don't confirm.
 const GIVEN_UNCONFIRMED_CONFIDENCE: f64 = 0.5;
+
+/// The lead arm counts as parallel once a crossing of the shoulder's height
+/// changes the wrist's height by this many torso lengths per step (full
+/// confidence).
+const ARM_PARALLEL_CLEAR_TORSO: f64 = 0.02;
 
 /// What [`detect`] knows about the impact.
 #[derive(Debug, Clone, Copy)]
@@ -565,7 +599,9 @@ pub(crate) fn detect(frames: &Frames, hint: ImpactHint) -> SwingEvents {
     let mut events = SwingEvents {
         address: None,
         takeaway: None,
+        arm_parallel_back: None,
         top: None,
+        arm_parallel_down: None,
         impact: None,
         impact_source: match hint {
             ImpactHint::Estimate => ImpactSource::Estimated,
@@ -645,8 +681,81 @@ pub(crate) fn detect(frames: &Frames, hint: ImpactHint) -> SwingEvents {
             hands.wrist_score_near(top) * rise * downswing_plausibility(downswing),
         ));
     }
+    if let Some((top, _)) = top {
+        let from = events.takeaway.map_or(0, |e| e.frame);
+        events.arm_parallel_back = top
+            .checked_sub(1)
+            .and_then(|last| hands.arm_parallel(from, last, true));
+        events.arm_parallel_down = hands.arm_parallel(top + 1, impact.frame.max(end), false);
+    }
     events.finish = hands.finish_after(top.map_or(end, |(t, _)| t), impact.frame.max(end));
     events
+}
+
+/// The lead wrist's height above the lead shoulder at a frame (pixels,
+/// positive with the wrist higher) and the two keypoints' mean score, each
+/// halved where it falls back (the hands for the wrist, the neck for the
+/// shoulder).
+fn lead_arm_height(body: &Body) -> Option<(f64, f64)> {
+    let (wrist, wrist_score) = match body.at(Joint::LeadWrist) {
+        Some(p) => (p, f64::from(body.score(Joint::LeadWrist))),
+        None => (
+            body.at(Joint::TrailWrist)?,
+            0.5 * f64::from(body.score(Joint::TrailWrist)),
+        ),
+    };
+    let (shoulder, shoulder_score) = match body.at(Joint::LeadShoulder) {
+        Some(p) => (p, f64::from(body.score(Joint::LeadShoulder))),
+        None => (
+            body.at(Joint::Neck)?,
+            0.5 * f64::from(body.score(Joint::Neck)),
+        ),
+    };
+    Some((
+        shoulder.y - wrist.y,
+        f64::midpoint(wrist_score, shoulder_score),
+    ))
+}
+
+impl Hands<'_> {
+    /// The last time between frames `from` and `to` (inclusive) that the
+    /// lead wrist rises through the lead shoulder's height (`up`), or the
+    /// first time it falls through it, interpolated between the frames
+    /// either side (across frames without the keypoints).
+    fn arm_parallel(&self, from: usize, to: usize, up: bool) -> Option<SwingEvent> {
+        let to = to.min(self.len().saturating_sub(1));
+        let mut prev: Option<(usize, f64, f64)> = None;
+        let mut found = None;
+        for i in from..=to {
+            let Some((a, score)) = lead_arm_height(&self.frames.bodies[i]) else {
+                continue;
+            };
+            if let Some((j, a0, score0)) = prev {
+                let crossed = if up {
+                    a0 < 0.0 && a >= 0.0
+                } else {
+                    a0 >= 0.0 && a < 0.0
+                };
+                if crossed {
+                    let step = a - a0;
+                    let u = (-a0 / step).clamp(0.0, 1.0);
+                    let t_ns = Self::ns(self.t[j] + u * (self.t[i] - self.t[j]));
+                    let frame = self.frames.nearest(t_ns).unwrap_or(i).clamp(j, i);
+                    let clear = (step.abs() / (ARM_PARALLEL_CLEAR_TORSO * self.scale)).min(1.0);
+                    found = Some(Self::event(
+                        frame,
+                        t_ns,
+                        f64::midpoint(score0, score) * clear,
+                    ));
+                    if !up {
+                        break;
+                    }
+                }
+            }
+            prev = Some((i, a, score));
+        }
+        found
+    }
 }
 
 impl Hands<'_> {
