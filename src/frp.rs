@@ -4,8 +4,9 @@
 //! shot's [`ShotKey`]. The trigger's source is the envelope's `device`, so
 //! two launch monitors seeing one swing join one clip, and a monitor's next
 //! shot cuts its previous clip short if that clip's window is still running.
-//! FRP events carry no timestamp: stamp them with
-//! [`clock::now_ns`](crate::clock::now_ns) when they arrive. Pass each shot
+//! A `shot_trigger`'s optional `timestamp` is the device's wall clock in epoch
+//! milliseconds, not this crate's monotonic clock: stamp each trigger with
+//! [`clock::now_ns`](crate::clock::now_ns) when it arrives. Pass each shot
 //! key once: a repeated `shot_trigger` for the same key would start a second
 //! clip.
 
@@ -39,7 +40,7 @@ pub fn trigger_from_envelope(
     impact_lead: Duration,
 ) -> Option<Trigger<ShotKey>> {
     match &envelope.event {
-        FrpEvent::ShotTrigger { key } => Some(
+        FrpEvent::ShotTrigger { key, .. } => Some(
             Trigger::new(at_ns, envelope.device.clone(), key.clone()).with_impact_lead(impact_lead),
         ),
         _ => None,
@@ -81,6 +82,12 @@ mod tests {
                 .source,
             "x"
         );
+        let stamped = FrpMessage::Envelope(FrpEnvelope::new(
+            "m",
+            FrpEvent::shot_trigger_at(ShotKey::new("id", 2), 1_794_063_845_123),
+        ));
+        let t = trigger_from_message(&stamped, 77, Duration::ZERO).unwrap();
+        assert_eq!((t.at_ns, t.tag.shot_number), (77, 2));
         let alert =
             FrpMessage::parse(r#"{"kind":"alert","severity":"warn","message":"m"}"#).unwrap();
         assert!(trigger_from_message(&alert, 0, Duration::ZERO).is_none());
