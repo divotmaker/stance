@@ -2860,8 +2860,10 @@ fn unknown_rows_are_skipped_not_errors() {
 
 #[test]
 fn the_builtin_table_never_panics_on_a_bad_embed() {
-    let json = Norms::builtin_json();
-    for cut in [0, 1, json.len() / 3, json.len() / 2, json.len() - 2] {
+    // Trimmed so the last cut always lands inside the closing brace, whatever
+    // line endings the checkout gave the embedded file.
+    let json = Norms::builtin_json().trim_end();
+    for cut in [0, 1, json.len() / 3, json.len() / 2, json.len() - 1] {
         assert!(Norms::from_json(&json[..cut]).is_err(), "cut at {cut}");
     }
     assert!(Norms::from_json("{}").is_err());
