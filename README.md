@@ -206,9 +206,10 @@ fn shot_detected() -> bool {
 ### Flight Relay Protocol
 
 With the `frp` feature, `frp::trigger_from_message` turns a Flight Relay
-Protocol `shot_trigger` into a `Trigger<ShotKey>` whose source is the
-envelope's device. The `frp_record` example connects to any FRP server and
-writes a clip per shot:
+Protocol `shot.trigger` into a `Trigger<ShotKey>` whose source is the
+message's `from`, the launch monitor actor that saw the strike. The
+`frp_record` example joins an FRP bus as a collector and writes a clip per
+shot:
 
 ```text
 cargo run --example frp_record --features frp -- --list

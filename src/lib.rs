@@ -18,7 +18,7 @@
 //! - [`jpeg::ensure_huffman`] makes webcam frames decodable by strict
 //!   decoders.
 //! - With the `frp` feature, [`frp`] maps Flight Relay Protocol
-//!   `shot_trigger` events onto triggers.
+//!   `shot.trigger` messages onto triggers.
 //! - With the `pose` feature (alpha), `pose` estimates body keypoints
 //!   (RTMPose, pure-Rust inference): live per frame, or over a recorded clip
 //!   on several threads. Models are downloaded separately and verified by

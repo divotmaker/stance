@@ -1,8 +1,10 @@
-//! Records a clip per shot from any Flight Relay Protocol server.
+//! Records a clip per shot from a Flight Relay Protocol bus.
 //!
-//! Connects to an FRP server as a controller, captures one camera (or the test
-//! pattern) and writes `<shot number>-<shot id>.avi` + `.json` for every
-//! `shot_trigger`. With `--keyboard`, pressing Enter triggers a shot instead.
+//! Joins an FRP bus (a hub or a launch monitor) as a collector actor,
+//! captures one camera (or the test pattern) and writes
+//! `<shot number>-<shot id>.avi` + `.json` for every `shot.trigger`. Its actor
+//! id is new on every run. With `--keyboard`, pressing Enter triggers a shot
+//! instead.
 //!
 //! ```text
 //! cargo run --example frp_record --features frp -- --list
@@ -13,9 +15,13 @@
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use flightrelay::{EndpointConfig, FrpEndpoint, Role, ShotKey, Transport};
+use flightrelay::types::roles;
+use flightrelay::{
+    BusActor, DEFAULT_HEARTBEAT, EndpointConfig, FrpBody, FrpEndpoint, FrpError, FrpMessage,
+    ShotKey, Transport,
+};
 use stance::frp::trigger_from_message;
 use stance::{
     Capture, CaptureConfig, CaptureStatus, ClipRecorder, FormatRequest, RecorderConfig,
@@ -219,19 +225,44 @@ fn save(args: &Args, events: Vec<RecorderEvent<ShotKey>>) {
     }
 }
 
-/// Reads FRP messages and forwards shot triggers, stamped on arrival.
+/// Joins the bus as a collector, keeps its `bus.actor` alive and forwards
+/// shot triggers, stamped on arrival.
 fn frp(url: &str, lead: Duration, tx: &SyncSender<Trigger<ShotKey>>) -> Result<(), String> {
-    let config = EndpointConfig::new(Role::Controller, Transport::connect(url))
-        .with_name("stance frp_record");
+    let me = FrpMessage::new(
+        flightrelay::new_actor_id(),
+        BusActor::new("stance frp_record", DEFAULT_HEARTBEAT.as_secs_f64())
+            .with_role(roles::COLLECTOR),
+    );
+    let config = EndpointConfig::new(Transport::connect(url));
     let mut endpoint = FrpEndpoint::open(config).map_err(|e| e.to_string())?;
     let mut conn = endpoint.establish().map_err(|e| e.to_string())?;
-    println!("connected to {url} (FRP {})", conn.version());
+    conn.greet(std::slice::from_ref(&me), &[])
+        .map_err(|e| e.to_string())?;
+    println!(
+        "connected to {url} (FRP {}) as {}",
+        flightrelay::SPEC_VERSION,
+        me.from
+    );
+    let mut beat = Instant::now();
     loop {
-        let msg = conn.recv().map_err(|e| e.to_string())?;
-        if let Some(t) = trigger_from_message(&msg, clock::now_ns(), lead)
-            && tx.send(t).is_err()
-        {
-            return Ok(());
+        let left = DEFAULT_HEARTBEAT.saturating_sub(beat.elapsed());
+        match conn.recv_timeout(left) {
+            Ok(Some(msg)) => {
+                if matches!(msg.body, FrpBody::BusSync(_)) {
+                    conn.send(&me).map_err(|e| e.to_string())?;
+                } else if let Some(t) = trigger_from_message(&msg, clock::now_ns(), lead)
+                    && tx.send(t).is_err()
+                {
+                    return Ok(());
+                }
+            }
+            // Nothing arrived in time, or one message that is not FRP: keep reading.
+            Ok(None) | Err(FrpError::Json(_)) => {}
+            Err(e) => return Err(e.to_string()),
+        }
+        if beat.elapsed() >= DEFAULT_HEARTBEAT {
+            beat = Instant::now();
+            conn.send(&me).map_err(|e| e.to_string())?;
         }
     }
 }
