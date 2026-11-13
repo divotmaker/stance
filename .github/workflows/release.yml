@@ -12,6 +12,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +42,7 @@ jobs:
   build:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       matrix:
         os: [windows-latest, macos-latest]
@@ -62,6 +64,7 @@ jobs:
     name: Publish to crates.io
     needs: [test, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -76,6 +79,7 @@ jobs:
     name: GitHub Release
     needs: publish
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -86,6 +90,7 @@ jobs:
     name: Version bump
     needs: publish
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
