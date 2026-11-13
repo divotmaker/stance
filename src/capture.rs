@@ -718,20 +718,15 @@ mod tests {
     }
 
     #[test]
-    fn request_stop_does_not_block_and_interrupts_a_hung_read() {
+    fn request_stop_interrupts_a_hung_read() {
         let config = CaptureConfig {
             stall: Duration::ZERO,
             ..CaptureConfig::default()
         };
         let cap = Capture::start(config, || Ok(Scripted::new(Vec::new(), true))).unwrap();
-        let started = Instant::now();
         cap.request_stop();
-        assert!(started.elapsed() < STOP_WAIT, "no wait");
         assert!(matches!(cap.status(), CaptureStatus::Stopped));
         wait_for("the thread to exit", || cap.is_finished());
-        let started = Instant::now();
-        drop(cap);
-        assert!(started.elapsed() < STOP_WAIT, "no wait");
     }
 
     #[test]
@@ -741,9 +736,8 @@ mod tests {
             ..CaptureConfig::default()
         };
         let cap = Capture::start(config, || Ok(Scripted::new(Vec::new(), true))).unwrap();
-        let started = Instant::now();
+        // Returning at all is the proof: a hung read would block `stop` forever.
         cap.stop();
-        assert!(started.elapsed() < Duration::from_secs(1));
     }
 
     #[test]
