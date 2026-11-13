@@ -726,12 +726,12 @@ mod tests {
         let cap = Capture::start(config, || Ok(Scripted::new(Vec::new(), true))).unwrap();
         let started = Instant::now();
         cap.request_stop();
-        assert!(started.elapsed() < Duration::from_millis(100));
+        assert!(started.elapsed() < STOP_WAIT, "no wait");
         assert!(matches!(cap.status(), CaptureStatus::Stopped));
         wait_for("the thread to exit", || cap.is_finished());
         let started = Instant::now();
         drop(cap);
-        assert!(started.elapsed() < Duration::from_millis(100), "no wait");
+        assert!(started.elapsed() < STOP_WAIT, "no wait");
     }
 
     #[test]

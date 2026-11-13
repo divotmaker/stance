@@ -1,8 +1,9 @@
 //! Pose tests against the real models.
 //!
-//! They run only when `STANCE_MODEL_DIR` names a directory holding the
-//! models as `<name>.onnx` (see `ModelSpec`); otherwise each prints a note
-//! and passes. `tests/data/golfer.rtmlib.json` holds rtmlib's keypoints for
+//! They are ignored by default. Run them with `cargo test --all-features --
+//! --ignored` and `STANCE_MODEL_DIR` naming a directory holding the models
+//! as `<name>.onnx` (see `ModelSpec`); without it each prints a note and
+//! passes. `tests/data/golfer.rtmlib.json` holds rtmlib's keypoints for
 //! `tests/data/golfer.jpg` (see `tests/data/README.md`).
 
 #![cfg(feature = "pose")]
@@ -96,6 +97,7 @@ fn bbox(b: [f32; 4]) -> BBox {
 }
 
 #[test]
+#[ignore = "needs model files"]
 fn rtmpose_matches_rtmlib() {
     let test = "rtmpose_matches_rtmlib";
     let Some(dir) = model_dir(test) else { return };
@@ -152,6 +154,7 @@ fn rtmpose_matches_rtmlib() {
 }
 
 #[test]
+#[ignore = "needs model files"]
 fn detector_finds_the_golfer() {
     let test = "detector_finds_the_golfer";
     let Some(dir) = model_dir(test) else { return };
@@ -228,6 +231,7 @@ fn sliding_clip(frames: usize) -> Clip<&'static str> {
 }
 
 #[test]
+#[ignore = "needs model files"]
 fn analyze_clip_tracks_a_generated_clip() {
     let test = "analyze_clip_tracks_a_generated_clip";
     let Some(dir) = model_dir(test) else { return };

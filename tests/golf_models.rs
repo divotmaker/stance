@@ -1,7 +1,8 @@
 //! Golf posture on real keypoints.
 //!
-//! Runs only when `STANCE_MODEL_DIR` names a directory holding the default
-//! models as `<name>.onnx`; otherwise it prints a note and passes. The test
+//! Ignored by default. Run it with `cargo test --all-features -- --ignored`
+//! and `STANCE_MODEL_DIR` naming a directory holding the default models as
+//! `<name>.onnx`; without it, it prints a note and passes. The test
 //! image (`tests/data/golfer.jpg`) shows a golfer from the side, facing the
 //! image's left, at the top of the backswing: down the line, that is a
 //! left-hander's view (or a right-hander's seen from the other side).
@@ -48,6 +49,7 @@ fn flip(image: &Image) -> Image {
 }
 
 #[test]
+#[ignore = "needs model files"]
 fn posture_from_real_keypoints_mirrors() {
     let Some(models) = models("posture_from_real_keypoints_mirrors") else {
         return;
