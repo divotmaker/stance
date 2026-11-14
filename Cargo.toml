@@ -14,9 +14,6 @@ categories = ["multimedia::video", "hardware-support"]
 name = "stance"
 
 [features]
-# Turns Flight Relay Protocol `shot_trigger` events into clip triggers
-# (`stance::frp`).
-frp = ["dep:flightrelay"]
 # Pose estimation (`stance::pose`): RTMPose keypoints, a YOLOX person
 # detector, single-golfer tracking, filters and the offline clip pass. Loads
 # ONNX models from a directory and verifies their SHA-256.
@@ -37,7 +34,6 @@ serde = { version = "1", features = ["derive"] }
 # `float_roundtrip`: sidecar frame rates (nominal and measured fps) parse back
 # to exactly the values written, so a read sidecar equals the written one.
 serde_json = { version = "1", features = ["float_roundtrip"] }
-flightrelay = { version = "0.6.0", optional = true }
 # `pose`: pure-Rust ONNX inference (one executable, no native libraries,
 # cross-builds to every target the crate supports). No default features: the
 # models need only the core ONNX operators, not `transformers`.
@@ -83,10 +79,6 @@ windows = { version = "0.62", features = [
 zune-jpeg = "0.5"
 # The WebSocket client in examples/frp_record.rs.
 flightrelay = { version = "0.6.0", features = ["transport"] }
-
-[[example]]
-name = "frp_record"
-required-features = ["frp"]
 
 [[example]]
 name = "pose_bench"

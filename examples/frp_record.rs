@@ -7,9 +7,9 @@
 //! instead.
 //!
 //! ```text
-//! cargo run --example frp_record --features frp -- --list
-//! cargo run --example frp_record --features frp -- --camera test-pattern --url ws://localhost:5880/frp
-//! cargo run --example frp_record --features frp -- --camera <id> --mode 1280x720@120 --lead-ms 0 --out clips
+//! cargo run --example frp_record -- --list
+//! cargo run --example frp_record -- --camera test-pattern --url ws://localhost:5880/frp
+//! cargo run --example frp_record -- --camera <id> --mode 1280x720@120 --lead-ms 0 --out clips
 //! ```
 
 use std::path::PathBuf;
@@ -22,7 +22,6 @@ use flightrelay::{
     BusActor, DEFAULT_HEARTBEAT, EndpointConfig, FrpBody, FrpEndpoint, FrpError, FrpMessage,
     ShotKey, Transport,
 };
-use stance::frp::trigger_from_message;
 use stance::{
     Capture, CaptureConfig, CaptureStatus, ClipRecorder, FormatRequest, RecorderConfig,
     RecorderEvent, Source, TEST_PATTERN_ID, TestPattern, Trigger, clock,
@@ -250,10 +249,14 @@ fn frp(url: &str, lead: Duration, tx: &SyncSender<Trigger<ShotKey>>) -> Result<(
             Ok(Some(msg)) => {
                 if matches!(msg.body, FrpBody::BusSync(_)) {
                     conn.send(&me).map_err(|e| e.to_string())?;
-                } else if let Some(t) = trigger_from_message(&msg, clock::now_ns(), lead)
-                    && tx.send(t).is_err()
-                {
-                    return Ok(());
+                } else if let FrpBody::ShotTrigger(shot) = msg.body {
+                    // The source is the launch monitor that saw the strike,
+                    // so two monitors seeing one swing join one clip.
+                    let t =
+                        Trigger::new(clock::now_ns(), msg.from, shot.key).with_impact_lead(lead);
+                    if tx.send(t).is_err() {
+                        return Ok(());
+                    }
                 }
             }
             // Nothing arrived in time, or one message that is not FRP: keep reading.
