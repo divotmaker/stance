@@ -1327,3 +1327,6 @@ fn side_of(v: f64, center: f64) -> Side {
         Side::On
     }
 }
+
+#[cfg(test)]
+mod tests;

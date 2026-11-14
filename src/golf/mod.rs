@@ -99,4 +99,6 @@ pub use smooth::{Smoothing, smooth_track};
 pub use view::{Guess, guess_view};
 
 #[cfg(test)]
+mod testfigure;
+#[cfg(test)]
 mod tests;
