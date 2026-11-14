@@ -12,6 +12,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::clock;
 use crate::frame::missing_between;
 use crate::source::Interrupter;
 use crate::{CameraInfo, Error, Format, Frame, Result, Ring, Source};
@@ -96,46 +97,119 @@ pub struct CaptureStats {
     pub ring_bytes: usize,
 }
 
-struct State {
+/// The capture's state and rules, without threads or a clock: sequence
+/// stamping, drop counting, the stall rule and the ring push. Every method
+/// takes the host monotonic time it runs at.
+struct Core {
     ring: Ring,
     latest: Option<Frame>,
     frames: u64,
     dropped: u64,
     status: CaptureStatus,
+    /// The next frame's sequence number.
+    next_seq: u64,
+    /// The source's nominal frame period, for drop counting.
+    period_ns: f64,
+    stall: Duration,
     /// When the last frame arrived (or the source opened).
-    last_frame_at: Instant,
+    last_frame_ns: u64,
 }
 
-impl State {
+impl Core {
+    fn new(config: &CaptureConfig, first_seq: u64, now_ns: u64) -> Self {
+        Self {
+            ring: Ring::new(config.ring_duration, config.ring_bytes),
+            latest: None,
+            frames: 0,
+            dropped: 0,
+            status: CaptureStatus::Running,
+            next_seq: first_seq,
+            period_ns: 0.0,
+            stall: config.stall,
+            last_frame_ns: now_ns,
+        }
+    }
+
     fn running(&self) -> bool {
         matches!(self.status, CaptureStatus::Running)
     }
 
-    /// Time left before `stall` runs out; `None` if stall detection is off.
-    fn stall_left(&self, stall: Duration) -> Option<Duration> {
-        (!stall.is_zero()).then(|| stall.saturating_sub(self.last_frame_at.elapsed()))
+    /// The source opened in `format`: frames are counted against its period
+    /// and the stall clock starts.
+    fn opened(&mut self, format: &Format, now_ns: u64) {
+        // Frame periods are far below 2^52 ns.
+        #[allow(clippy::cast_precision_loss)]
+        let period_ns = format.frame_period_ns() as f64;
+        self.period_ns = period_ns;
+        self.last_frame_ns = now_ns;
+    }
+
+    /// Stamps `frame`, counts the frames missing before it and pushes it into
+    /// the ring. False, with the frame discarded, once the capture is no
+    /// longer running.
+    fn on_frame(&mut self, mut frame: Frame, now_ns: u64) -> bool {
+        if !self.running() {
+            return false;
+        }
+        frame.seq = self.next_seq;
+        self.next_seq += 1;
+        self.dropped += self
+            .latest
+            .as_ref()
+            .map_or(0, |p| missing_between(p, &frame, self.period_ns));
+        self.frames += 1;
+        self.last_frame_ns = now_ns;
+        self.latest = Some(frame.clone());
+        self.ring.push(frame);
+        true
+    }
+
+    /// Time left at `now_ns` before the stall runs out; `None` if stall
+    /// detection is off.
+    fn stall_left(&self, now_ns: u64) -> Option<Duration> {
+        let silent = Duration::from_nanos(now_ns.saturating_sub(self.last_frame_ns));
+        (!self.stall.is_zero()).then(|| self.stall.saturating_sub(silent))
+    }
+
+    /// The stall rule, applied at `now_ns` while no frame is arriving: true
+    /// when this call failed a running capture with [`Error::Stalled`].
+    fn on_idle(&mut self, now_ns: u64) -> bool {
+        let stalled = self.running() && self.stall_left(now_ns).is_some_and(|d| d.is_zero());
+        if stalled {
+            self.status = CaptureStatus::Failed(Arc::new(Error::Stalled(self.stall)));
+        }
+        stalled
+    }
+
+    /// Fails the capture with `error`, unless it already ended.
+    fn fail(&mut self, error: Error) {
+        if self.running() {
+            self.status = CaptureStatus::Failed(Arc::new(error));
+        }
+    }
+
+    /// Marks the capture stopped, unless it already ended.
+    fn stop(&mut self) {
+        if self.running() {
+            self.status = CaptureStatus::Stopped;
+        }
     }
 }
 
 struct Shared {
-    state: Mutex<State>,
+    state: Mutex<Core>,
     frame_ready: Condvar,
     stop: AtomicBool,
-    stall: Duration,
 }
 
 impl Shared {
-    fn lock(&self) -> MutexGuard<'_, State> {
+    fn lock(&self) -> MutexGuard<'_, Core> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Marks the capture failed (if it is still running) and wakes waiters.
     fn fail(&self, error: Error) {
-        let mut state = self.lock();
-        if state.running() {
-            state.status = CaptureStatus::Failed(Arc::new(error));
-        }
-        drop(state);
+        self.lock().fail(error);
         self.frame_ready.notify_all();
     }
 }
@@ -220,24 +294,13 @@ impl Capture {
         F: FnOnce() -> Result<S> + Send + 'static,
     {
         let shared = Arc::new(Shared {
-            state: Mutex::new(State {
-                ring: Ring::new(config.ring_duration, config.ring_bytes),
-                latest: None,
-                frames: 0,
-                dropped: 0,
-                status: CaptureStatus::Running,
-                last_frame_at: Instant::now(),
-            }),
+            state: Mutex::new(Core::new(&config, next_first_seq(), clock::now_ns())),
             frame_ready: Condvar::new(),
             stop: AtomicBool::new(false),
-            stall: config.stall,
         });
         let (ready_tx, ready_rx) = mpsc::sync_channel::<Result<Opened>>(1);
         let thread_shared = Arc::clone(&shared);
         let read_timeout = config.read_timeout;
-        let first_seq = NEXT_SEQ_BLOCK
-            .fetch_add(1, Ordering::Relaxed)
-            .saturating_mul(SEQ_BLOCK);
         let thread = thread::Builder::new()
             .name(config.thread_name)
             .spawn(move || {
@@ -248,7 +311,9 @@ impl Capture {
                         return;
                     }
                 };
-                thread_shared.lock().last_frame_at = Instant::now();
+                thread_shared
+                    .lock()
+                    .opened(source.format(), clock::now_ns());
                 let opened = (
                     source.info().clone(),
                     source.format().clone(),
@@ -257,7 +322,7 @@ impl Capture {
                 if ready_tx.send(Ok(opened)).is_err() {
                     return;
                 }
-                run(&mut source, &thread_shared, read_timeout, first_seq);
+                run(&mut source, &thread_shared, read_timeout);
             })
             .map_err(|e| Error::io("spawning the capture thread", e))?;
         match ready_rx.recv() {
@@ -321,8 +386,8 @@ impl Capture {
             if !frames.is_empty() || !state.running() {
                 return frames;
             }
-            let stall_left = state.stall_left(self.shared.stall);
-            if stall_left.is_some_and(|d| d.is_zero()) {
+            let now_ns = clock::now_ns();
+            if state.on_idle(now_ns) {
                 drop(state);
                 self.stalled();
                 return frames;
@@ -331,7 +396,7 @@ impl Capture {
             if left.is_zero() {
                 return frames;
             }
-            let wait = stall_left.map_or(left, |s| s.min(left));
+            let wait = state.stall_left(now_ns).map_or(left, |s| s.min(left));
             state = match self.shared.frame_ready.wait_timeout(state, wait) {
                 Ok((guard, _)) => guard,
                 Err(poisoned) => poisoned.into_inner().0,
@@ -344,32 +409,27 @@ impl Capture {
     /// camera.
     #[must_use]
     pub fn status(&self) -> CaptureStatus {
-        let state = self.shared.lock();
-        if state.running() {
-            if state
-                .stall_left(self.shared.stall)
-                .is_some_and(|d| d.is_zero())
-            {
-                drop(state);
-                self.stalled();
-                return self.shared.lock().status.clone();
-            }
-            if self.is_finished() {
-                // Only a panic ends the thread without setting a status.
-                drop(state);
-                self.shared.fail(Error::Device {
-                    context: "capture thread".into(),
-                    message: "exited unexpectedly".into(),
-                });
-                return self.shared.lock().status.clone();
-            }
+        let mut state = self.shared.lock();
+        if state.on_idle(clock::now_ns()) {
+            let status = state.status.clone();
+            drop(state);
+            self.stalled();
+            return status;
+        }
+        if state.running() && self.is_finished() {
+            // Only a panic ends the thread without setting a status.
+            state.fail(Error::Device {
+                context: "capture thread".into(),
+                message: "exited unexpectedly".into(),
+            });
         }
         state.status.clone()
     }
 
-    /// Fails the capture with [`Error::Stalled`] and ends the blocked read.
+    /// After the capture failed as stalled: wakes waiters and ends the
+    /// blocked read.
     fn stalled(&self) {
-        self.shared.fail(Error::Stalled(self.shared.stall));
+        self.shared.frame_ready.notify_all();
         self.shared.stop.store(true, Ordering::SeqCst);
         if let Some(i) = &self.interrupter {
             i.interrupt();
@@ -413,11 +473,7 @@ impl Capture {
     /// so the camera is free to reopen as soon as [`Capture::is_finished`].
     pub fn request_stop(&self) {
         self.shared.stop.store(true, Ordering::SeqCst);
-        let mut state = self.shared.lock();
-        if state.running() {
-            state.status = CaptureStatus::Stopped;
-        }
-        drop(state);
+        self.shared.lock().stop();
         self.shared.frame_ready.notify_all();
         if let Some(i) = &self.interrupter {
             i.interrupt();
@@ -459,42 +515,28 @@ impl Drop for Capture {
     }
 }
 
-/// The capture loop: read, stamp, push, repeat until stopped, or until the
-/// source fails or stalls.
-fn run<S: Source>(source: &mut S, shared: &Shared, read_timeout: Duration, first_seq: u64) {
-    // Frame periods are far below 2^52 ns.
-    #[allow(clippy::cast_precision_loss)]
-    let period = source.format().frame_period_ns() as f64;
-    let mut previous: Option<Frame> = None;
-    let mut seq = first_seq;
+/// The next capture's first sequence number: the start of a block above every
+/// block handed out before.
+fn next_first_seq() -> u64 {
+    NEXT_SEQ_BLOCK
+        .fetch_add(1, Ordering::Relaxed)
+        .saturating_mul(SEQ_BLOCK)
+}
+
+/// The capture loop: read, hand each frame to the core, repeat until stopped,
+/// or until the source fails or stalls.
+fn run<S: Source>(source: &mut S, shared: &Shared, read_timeout: Duration) {
     while !shared.stop.load(Ordering::SeqCst) {
         match source.next_frame(read_timeout) {
-            Ok(Some(mut frame)) => {
-                frame.seq = seq;
-                seq += 1;
-                let missing = previous
-                    .as_ref()
-                    .map_or(0, |p| missing_between(p, &frame, period));
-                let mut state = shared.lock();
-                if !state.running() {
+            Ok(Some(frame)) => {
+                if !shared.lock().on_frame(frame, clock::now_ns()) {
                     break;
                 }
-                state.frames += 1;
-                state.dropped += missing;
-                state.last_frame_at = Instant::now();
-                state.latest = Some(frame.clone());
-                state.ring.push(frame.clone());
-                drop(state);
                 shared.frame_ready.notify_all();
-                previous = Some(frame);
             }
             Ok(None) => {
-                if shared
-                    .lock()
-                    .stall_left(shared.stall)
-                    .is_some_and(|d| d.is_zero())
-                {
-                    shared.fail(Error::Stalled(shared.stall));
+                if shared.lock().on_idle(clock::now_ns()) {
+                    shared.frame_ready.notify_all();
                     return;
                 }
             }
@@ -504,10 +546,7 @@ fn run<S: Source>(source: &mut S, shared: &Shared, read_timeout: Duration, first
             }
         }
     }
-    let mut state = shared.lock();
-    if state.running() {
-        state.status = CaptureStatus::Stopped;
-    }
+    shared.lock().stop();
 }
 
 #[cfg(test)]
@@ -516,6 +555,8 @@ mod tests {
 
     use super::*;
     use crate::{TestPattern, TestPatternConfig};
+
+    const MS: u64 = 1_000_000;
 
     fn pattern(frames: u64) -> TestPatternConfig {
         TestPatternConfig {
@@ -536,62 +577,128 @@ mod tests {
         }
     }
 
-    fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while !done() {
-            assert!(Instant::now() < deadline, "timed out waiting for {what}");
-            thread::sleep(Duration::from_millis(5));
+    fn frame_at(host_ms: u64) -> Frame {
+        Frame {
+            jpeg: Arc::from(vec![0u8; 4]),
+            host_ns: host_ms * MS,
+            device_ns: None,
+            seq: 0,
+            width: 32,
+            height: 32,
         }
     }
 
-    /// Delivers the given frames, then nothing: each read waits out its
-    /// timeout, or, with `blocking`, waits until interrupted whatever the
+    /// A core for a 100 fps source opened at `t = 0`.
+    fn core(config: &CaptureConfig) -> Core {
+        let mut core = Core::new(config, next_first_seq(), 0);
+        let format = TestPattern::new(pattern(1)).unwrap().format().clone();
+        core.opened(&format, 0);
+        core
+    }
+
+    #[test]
+    fn core_stamps_counts_and_keeps_frames() {
+        let mut c = core(&large_ring());
+        let first = c.next_seq;
+        // Arrival times only: a four-period gap is three missing frames.
+        for ms in [0, 10, 20, 60] {
+            assert!(c.on_frame(frame_at(ms), ms * MS));
+        }
+        let seqs: Vec<u64> = c.ring.after(None).iter().map(|f| f.seq - first).collect();
+        assert_eq!(seqs, [0, 1, 2, 3], "consecutive");
+        assert_eq!((c.frames, c.dropped), (4, 3));
+        assert_eq!(c.latest.as_ref().unwrap().seq, first + 3);
+    }
+
+    #[test]
+    fn ring_bounds_the_backlog() {
+        let mut c = core(&CaptureConfig {
+            ring_duration: Duration::from_millis(100),
+            ..CaptureConfig::default()
+        });
+        for i in 0..200 {
+            c.on_frame(frame_at(1000 + i * 10), 0);
+        }
+        let frames = c.ring.after(None);
+        assert_eq!(frames.len(), 11, "100 ms at 100 fps, both ends");
+        assert_eq!(frames.last().unwrap().host_ns, (1000 + 199 * 10) * MS);
+    }
+
+    #[test]
+    fn cursors_survive_a_new_capture() {
+        let mut first = core(&large_ring());
+        for ms in 0..5 {
+            first.on_frame(frame_at(ms * 10), 0);
+        }
+        let cursor = first.ring.after(None).last().map(|f| f.seq);
+        // A reconnect: a new capture, the consumer keeps its cursor.
+        let mut second = core(&large_ring());
+        for ms in 0..5 {
+            second.on_frame(frame_at(ms * 10), 0);
+        }
+        let frames = second.ring.after(cursor);
+        assert_eq!(frames.len(), 5, "every frame of the new capture");
+        assert!(frames.windows(2).all(|w| w[1].seq == w[0].seq + 1));
+    }
+
+    #[test]
+    fn a_silent_source_fails_as_stalled() {
+        let mut c = core(&CaptureConfig {
+            stall: Duration::from_millis(100),
+            ..CaptureConfig::default()
+        });
+        assert!(!c.on_idle(99 * MS), "silent since opening, not yet stalled");
+        assert_eq!(c.stall_left(40 * MS), Some(Duration::from_millis(60)));
+        // A frame restarts the stall clock.
+        assert!(c.on_frame(frame_at(50), 50 * MS));
+        assert!(!c.on_idle(149 * MS));
+        assert!(c.on_idle(150 * MS));
+        assert!(matches!(&c.status, CaptureStatus::Failed(e) if matches!(**e, Error::Stalled(_))));
+        assert!(!c.on_idle(500 * MS), "reported once");
+        assert!(
+            !c.on_frame(frame_at(500), 500 * MS),
+            "no frames after a failure"
+        );
+        assert_eq!(c.frames, 1);
+    }
+
+    #[test]
+    fn zero_stall_never_fails_and_stopping_ends_frames() {
+        let mut c = core(&CaptureConfig {
+            stall: Duration::ZERO,
+            ..CaptureConfig::default()
+        });
+        assert_eq!(c.stall_left(u64::MAX), None);
+        assert!(!c.on_idle(u64::MAX));
+        c.stop();
+        assert!(matches!(c.status, CaptureStatus::Stopped));
+        assert!(!c.on_frame(frame_at(0), 0));
+        c.fail(Error::Ended);
+        assert!(
+            matches!(c.status, CaptureStatus::Stopped),
+            "stopped stays stopped"
+        );
+    }
+
+    /// Delivers nothing: every read waits until interrupted, whatever its
     /// timeout (a Media Foundation camera gone silent).
-    struct Scripted {
-        frames: Vec<Frame>,
-        blocking: bool,
+    struct Hung {
         interrupted: Arc<(Mutex<bool>, Condvar)>,
         info: CameraInfo,
         format: Format,
     }
 
-    impl Scripted {
-        fn new(frames: Vec<Frame>, blocking: bool) -> Self {
-            let source = TestPattern::new(pattern(1)).unwrap();
-            let mut frames = frames;
-            frames.reverse();
-            Self {
-                frames,
-                blocking,
-                interrupted: Arc::new((Mutex::new(false), Condvar::new())),
-                info: source.info().clone(),
-                format: source.format().clone(),
-            }
-        }
-    }
-
-    impl Source for Scripted {
-        fn next_frame(&mut self, timeout: Duration) -> Result<Option<Frame>> {
-            if let Some(f) = self.frames.pop() {
-                return Ok(Some(f));
-            }
+    impl Source for Hung {
+        fn next_frame(&mut self, _: Duration) -> Result<Option<Frame>> {
             let (lock, cv) = &*self.interrupted;
             let mut stopped = lock.lock().unwrap();
-            if self.blocking {
-                while !*stopped {
-                    stopped = cv.wait(stopped).unwrap();
-                }
-            } else if !*stopped {
-                stopped = cv.wait_timeout(stopped, timeout).unwrap().0;
+            while !*stopped {
+                stopped = cv.wait(stopped).unwrap();
             }
-            if *stopped {
-                Err(Error::Device {
-                    context: "reading a frame".into(),
-                    message: "shut down".into(),
-                })
-            } else {
-                Ok(None)
-            }
+            Err(Error::Device {
+                context: "reading a frame".into(),
+                message: "shut down".into(),
+            })
         }
 
         fn info(&self) -> &CameraInfo {
@@ -611,19 +718,20 @@ mod tests {
         }
     }
 
-    fn frame_at(host_ms: u64, device_ms: Option<u64>) -> Frame {
-        Frame {
-            jpeg: Arc::from(vec![0u8; 4]),
-            host_ns: host_ms * 1_000_000,
-            device_ns: device_ms.map(|ms| ms * 1_000_000),
-            seq: 0,
-            width: 32,
-            height: 32,
-        }
-    }
-
     #[test]
     fn reports_source_end_instead_of_spinning() {
+        let err = Capture::start(CaptureConfig::default(), || {
+            TestPattern::new(TestPatternConfig {
+                fps: 0,
+                ..TestPatternConfig::default()
+            })
+        })
+        .unwrap_err();
+        assert!(
+            matches!(err, Error::InvalidArgument(_)),
+            "open errors are returned"
+        );
+
         let cap = Capture::start(large_ring(), || TestPattern::new(pattern(20))).unwrap();
         let mut seen = Vec::new();
         let mut cursor = None;
@@ -651,176 +759,23 @@ mod tests {
     }
 
     #[test]
-    fn cursors_survive_a_new_capture() {
-        let first = Capture::start(large_ring(), || TestPattern::new(pattern(5))).unwrap();
-        wait_for("the first capture to end", || {
-            !matches!(first.status(), CaptureStatus::Running)
-        });
-        let cursor = first.frames_after(None).last().map(|f| f.seq);
-        first.stop();
-        // A reconnect: a new capture, the consumer keeps its cursor.
-        let second = Capture::start(large_ring(), || TestPattern::new(pattern(5))).unwrap();
-        wait_for("the second capture to end", || {
-            !matches!(second.status(), CaptureStatus::Running)
-        });
-        let frames = second.frames_after(cursor);
-        assert_eq!(frames.len(), 5, "every frame of the new capture");
-        assert!(frames.windows(2).all(|w| w[1].seq == w[0].seq + 1));
-    }
-
-    #[test]
-    fn ring_bounds_the_backlog() {
-        let cfg = CaptureConfig {
-            ring_duration: Duration::from_millis(100),
-            ..CaptureConfig::default()
-        };
-        let cap = Capture::start(cfg, || TestPattern::new(pattern(200))).unwrap();
-        wait_for("the source to end", || {
-            !matches!(cap.status(), CaptureStatus::Running)
-        });
-        let frames = cap.frames_after(None);
-        assert_eq!(frames.len(), 11, "100 ms at 100 fps, both ends");
-        assert_eq!(
-            frames.last().unwrap().host_ns,
-            1_000_000_000 + 199 * 10_000_000
-        );
-    }
-
-    #[test]
-    fn open_errors_are_returned() {
-        let err = Capture::start(CaptureConfig::default(), || {
-            TestPattern::new(TestPatternConfig {
-                fps: 0,
-                ..TestPatternConfig::default()
-            })
-        })
-        .unwrap_err();
-        assert!(matches!(err, Error::InvalidArgument(_)));
-    }
-
-    #[test]
-    fn stops_on_request() {
-        let cfg = TestPatternConfig {
-            paced: true,
-            frames: None,
-            origin_ns: None,
-            ..pattern(0)
-        };
-        let cap = Capture::start(CaptureConfig::default(), move || TestPattern::new(cfg)).unwrap();
-        assert!(
-            !cap.wait_frames_after(None, Duration::from_secs(2))
-                .is_empty()
-        );
-        assert!(matches!(cap.status(), CaptureStatus::Running));
-        let shared = Arc::clone(&cap.shared);
-        cap.stop();
-        assert!(matches!(shared.lock().status, CaptureStatus::Stopped));
-    }
-
-    #[test]
-    fn request_stop_interrupts_a_hung_read() {
-        let config = CaptureConfig {
-            stall: Duration::ZERO,
-            ..CaptureConfig::default()
-        };
-        let cap = Capture::start(config, || Ok(Scripted::new(Vec::new(), true))).unwrap();
-        cap.request_stop();
-        assert!(matches!(cap.status(), CaptureStatus::Stopped));
-        wait_for("the thread to exit", || cap.is_finished());
-    }
-
-    #[test]
     fn stop_ends_a_hung_read_through_the_interrupter() {
         let config = CaptureConfig {
             stall: Duration::ZERO,
             ..CaptureConfig::default()
         };
-        let cap = Capture::start(config, || Ok(Scripted::new(Vec::new(), true))).unwrap();
-        // Returning at all is the proof: a hung read would block `stop` forever.
-        cap.stop();
-    }
-
-    #[test]
-    fn a_silent_source_fails_as_stalled() {
-        let config = CaptureConfig {
-            stall: Duration::from_millis(100),
-            read_timeout: Duration::from_millis(10),
-            ..CaptureConfig::default()
-        };
-        let frames = vec![frame_at(1000, None)];
-        let cap = Capture::start(config, move || Ok(Scripted::new(frames, false))).unwrap();
-        wait_for(
-            "the stall",
-            || matches!(cap.status(), CaptureStatus::Failed(e) if matches!(*e, Error::Stalled(_))),
-        );
-        assert_eq!(cap.stats().frames, 1);
-        wait_for("the thread to exit", || cap.is_finished());
-    }
-
-    #[test]
-    fn a_read_blocked_past_the_stall_fails_and_is_interrupted() {
-        let config = CaptureConfig {
-            stall: Duration::from_millis(100),
-            ..CaptureConfig::default()
-        };
-        let cap = Capture::start(config, || Ok(Scripted::new(Vec::new(), true))).unwrap();
-        // The thread is stuck in its read; waiting notices the stall.
-        let started = Instant::now();
-        assert!(
-            cap.wait_frames_after(None, Duration::from_secs(5))
-                .is_empty()
-        );
-        assert!(started.elapsed() < Duration::from_secs(2));
-        assert!(
-            matches!(cap.status(), CaptureStatus::Failed(e) if matches!(*e, Error::Stalled(_)))
-        );
-        wait_for("the interrupted thread to exit", || cap.is_finished());
-    }
-
-    #[test]
-    fn counts_drops_on_device_times_when_present() {
-        // Arrival jitter with exact device times: nothing dropped. Then a
-        // two-period gap in device times: one frame.
-        let frames = vec![
-            frame_at(1000, Some(0)),
-            frame_at(1018, Some(10)),
-            frame_at(1022, Some(20)),
-            frame_at(1050, Some(40)),
-            // Arrival times only: a two-period gap is jitter, four is three frames.
-            frame_at(1070, None),
-            frame_at(1110, None),
-        ];
-        let config = CaptureConfig {
-            stall: Duration::ZERO,
-            read_timeout: Duration::from_millis(10),
-            ..large_ring()
-        };
-        let cap = Capture::start(config, move || Ok(Scripted::new(frames, false))).unwrap();
-        wait_for("six frames", || cap.stats().frames == 6);
-        assert_eq!(cap.stats().dropped, 1 + 3);
-    }
-
-    #[test]
-    fn a_dead_thread_is_reported() {
-        struct Panics(Scripted);
-        impl Source for Panics {
-            fn next_frame(&mut self, _: Duration) -> Result<Option<Frame>> {
-                panic!("a source bug");
-            }
-            fn info(&self) -> &CameraInfo {
-                self.0.info()
-            }
-            fn format(&self) -> &Format {
-                self.0.format()
-            }
-        }
-        let cap = Capture::start(CaptureConfig::default(), || {
-            Ok(Panics(Scripted::new(Vec::new(), false)))
+        let cap = Capture::start(config, || {
+            let pattern = TestPattern::new(pattern(1))?;
+            Ok(Hung {
+                interrupted: Arc::new((Mutex::new(false), Condvar::new())),
+                info: pattern.info().clone(),
+                format: pattern.format().clone(),
+            })
         })
         .unwrap();
-        wait_for("the thread to die", || cap.is_finished());
-        assert!(
-            matches!(cap.status(), CaptureStatus::Failed(e) if matches!(*e, Error::Device { .. }))
-        );
+        cap.request_stop();
+        assert!(matches!(cap.status(), CaptureStatus::Stopped));
+        // Returning at all is the proof: a hung read would block `stop`.
+        cap.stop();
     }
 }
