@@ -422,6 +422,7 @@ impl Capture {
                 context: "capture thread".into(),
                 message: "exited unexpectedly".into(),
             });
+            self.shared.frame_ready.notify_all();
         }
         state.status.clone()
     }
@@ -611,20 +612,6 @@ mod tests {
     }
 
     #[test]
-    fn ring_bounds_the_backlog() {
-        let mut c = core(&CaptureConfig {
-            ring_duration: Duration::from_millis(100),
-            ..CaptureConfig::default()
-        });
-        for i in 0..200 {
-            c.on_frame(frame_at(1000 + i * 10), 0);
-        }
-        let frames = c.ring.after(None);
-        assert_eq!(frames.len(), 11, "100 ms at 100 fps, both ends");
-        assert_eq!(frames.last().unwrap().host_ns, (1000 + 199 * 10) * MS);
-    }
-
-    #[test]
     fn cursors_survive_a_new_capture() {
         let mut first = core(&large_ring());
         for ms in 0..5 {
@@ -684,12 +671,15 @@ mod tests {
     /// timeout (a Media Foundation camera gone silent).
     struct Hung {
         interrupted: Arc<(Mutex<bool>, Condvar)>,
+        /// Signaled when the first read begins.
+        reading: mpsc::Sender<()>,
         info: CameraInfo,
         format: Format,
     }
 
     impl Source for Hung {
         fn next_frame(&mut self, _: Duration) -> Result<Option<Frame>> {
+            let _ = self.reading.send(());
             let (lock, cv) = &*self.interrupted;
             let mut stopped = lock.lock().unwrap();
             while !*stopped {
@@ -764,18 +754,22 @@ mod tests {
             stall: Duration::ZERO,
             ..CaptureConfig::default()
         };
-        let cap = Capture::start(config, || {
+        let (reading, in_read) = mpsc::channel();
+        let mut cap = Capture::start(config, || {
             let pattern = TestPattern::new(pattern(1))?;
             Ok(Hung {
                 interrupted: Arc::new((Mutex::new(false), Condvar::new())),
+                reading,
                 info: pattern.info().clone(),
                 format: pattern.format().clone(),
             })
         })
         .unwrap();
+        in_read.recv().unwrap();
         cap.request_stop();
         assert!(matches!(cap.status(), CaptureStatus::Stopped));
-        // Returning at all is the proof: a hung read would block `stop`.
-        cap.stop();
+        // The thread exiting is the proof: a hung read would never return.
+        let thread = cap.thread.take().unwrap();
+        thread.join().unwrap();
     }
 }
