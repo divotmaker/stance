@@ -107,7 +107,7 @@ mod testutil;
 
 #[cfg(not(target_family = "wasm"))]
 pub use avi::AviFile;
-pub use camera::{Camera, CameraInfo, FormatRequest, choose_format, list, open};
+pub use camera::{Camera, CameraInfo, FormatRequest, list, open};
 #[cfg(not(target_family = "wasm"))]
 pub use capture::{Capture, CaptureConfig, CaptureStats, CaptureStatus};
 pub use error::{Error, Result};

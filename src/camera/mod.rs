@@ -330,14 +330,11 @@ impl<'de> Deserialize<'de> for FormatRequest {
 ///
 /// [`Error::NoMjpeg`] if the camera has no MJPEG mode, [`Error::NoMatchingFormat`]
 /// if none matches the requested size and rate.
-///
-/// ```
-/// use stance::{Format, FormatRequest, choose_format};
-/// let modes = [Format::mjpeg(1920, 1080, 30), Format::mjpeg(1280, 720, 120)];
-/// assert_eq!(choose_format("cam", &modes, &FormatRequest::Auto)?, modes[1]);
-/// # Ok::<(), stance::Error>(())
-/// ```
-pub fn choose_format(camera: &str, formats: &[Format], request: &FormatRequest) -> Result<Format> {
+pub(crate) fn choose_format(
+    camera: &str,
+    formats: &[Format],
+    request: &FormatRequest,
+) -> Result<Format> {
     let mjpeg: Vec<&Format> = formats.iter().filter(|f| f.is_mjpeg()).collect();
     if mjpeg.is_empty() {
         let mut offered: Vec<&str> = formats.iter().map(|f| f.fourcc.as_str()).collect();

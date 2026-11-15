@@ -37,8 +37,11 @@ use stance::golf::{
     SwingConfig, SwingEvent, SwingReport, Unit, View, analyze_swing, smooth_track,
 };
 use stance::pose::{
-    Image, PoseConfig, PoseFrame, PoseModels, PoseTrack, Rotation, analyze_clip, decode_jpeg, draw,
+    Image, PoseConfig, PoseFrame, PoseModels, PoseTrack, Rotation, analyze_clip, decode_jpeg,
 };
+
+#[path = "support/draw.rs"]
+mod draw;
 
 /// The hands' path.
 const PATH: draw::Rgb = [255, 230, 0];

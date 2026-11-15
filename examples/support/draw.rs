@@ -3,10 +3,12 @@
 //! dependencies.
 //!
 //! Coordinates are image pixels; anything outside the image is clipped.
+//! Shared by the `pose_render` and `golf_report` examples; its tests run
+//! as `pose_render`'s.
 
-use super::Keypoint;
-use super::image::Image;
-use super::skeleton::{Side, Skeleton};
+#![allow(dead_code, reason = "each example uses part of the module")]
+
+use stance::pose::{Image, Keypoint, Side, Skeleton};
 
 /// An RGB color.
 pub type Rgb = [u8; 3];
@@ -286,7 +288,6 @@ fn glyph(c: char) -> [u8; 7] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pose::Keypoint;
 
     fn black(w: u32, h: u32) -> Image {
         Image::new(w, h, vec![0; (w * h * 3) as usize]).unwrap()

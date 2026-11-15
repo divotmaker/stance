@@ -99,11 +99,11 @@ fn alpha(cutoff: f64, dt: f64) -> f64 {
 /// segments before and after impact separately, so the filter doesn't smear
 /// the impact frames.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct Butterworth {
+pub(crate) struct Butterworth {
     /// Cutoff frequency (Hz).
-    pub cutoff_hz: f64,
+    pub(crate) cutoff_hz: f64,
     /// Order of the designed filter, 1–8.
-    pub order: u32,
+    pub(crate) order: u32,
 }
 
 /// One second-order section, transposed direct form II.

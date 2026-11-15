@@ -9,7 +9,7 @@
 //! through stance's own clip writer, with its sidecar), the track as
 //! `<clip><suffix>.pose.json`, and JPEG stills at the impact frame and at
 //! every event a `manifest.json` beside the clip lists for it. The skeleton
-//! is drawn with `stance::pose::draw`: the person's left side in cyan, the
+//! is drawn by `support/draw.rs`: the person's left side in cyan, the
 //! right in orange, the midline in white; low-score keypoints fade out.
 
 use std::path::{Path, PathBuf};
@@ -19,9 +19,12 @@ use std::sync::Arc;
 use serde_json::Value;
 use stance::pose::{
     Image, ModelSpec, PoseConfig, PoseModels, RTMPOSE_M_HALPE26, YOLOX_TINY, analyze_clip,
-    decode_jpeg, draw,
+    decode_jpeg,
 };
 use stance::{Clip, Frame};
+
+#[path = "support/draw.rs"]
+mod draw;
 
 struct Args {
     models: PathBuf,

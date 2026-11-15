@@ -11,7 +11,7 @@ use crate::{Error, Result};
 /// A keypoint scoring below `min_score` is a gap, never a zero. Gaps up to
 /// `max_gap_ns` long (from the last good sample to the next) are filled by
 /// linear interpolation; longer gaps stay empty. Each unbroken stretch of a
-/// keypoint is then filtered with a zero-phase [`Butterworth`] low-pass,
+/// keypoint is then filtered with a zero-phase Butterworth low-pass,
 /// separately before and after the impact, so the filter doesn't smear the
 /// fastest frames of the swing. The filter's sample rate is the median
 /// frame interval: frames are not resampled, so a camera that drops frames

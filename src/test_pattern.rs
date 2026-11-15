@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use crate::avi::wait_until;
 use crate::{
-    CameraInfo, Error, Format, FormatRequest, Frame, Result, Source, choose_format, clock,
+    CameraInfo, Error, Format, FormatRequest, Frame, Result, Source, camera::choose_format, clock,
 };
 
 /// The [`CameraInfo::id`] of test pattern sources.

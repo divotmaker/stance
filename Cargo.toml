@@ -87,6 +87,8 @@ required-features = ["pose"]
 [[example]]
 name = "pose_render"
 required-features = ["pose"]
+# Runs the tests of `examples/support/draw.rs`.
+test = true
 
 [[example]]
 name = "golf_report"

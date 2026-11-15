@@ -16,9 +16,9 @@
 //!   which [`PoseTrack::write_beside`] stores as `<clip>.pose.json`.
 //! - A pose scoring below [`PoseConfig::min_pose_score`] is absent: `None`
 //!   live, an empty frame in a track.
-//! - [`OneEuro`] and [`Butterworth`] smooth keypoint series; filtering is
+//! - [`OneEuro`] smooths keypoint series live, and [`crate::golf`] smooths
+//!   a whole track with a zero-phase Butterworth low-pass; filtering is
 //!   derived from a track, never stored in it.
-//! - [`draw`] annotates images: skeletons, lines, disks and text.
 //!
 //! The pipeline is generic over [`PoseEngine`] and [`PersonDetector`]:
 //! [`PoseModels::load`] gives the default pair, [`PoseModels::new`] any
@@ -70,7 +70,6 @@ use serde::{Deserialize, Serialize};
 mod clip;
 #[cfg(feature = "pose-download")]
 mod download;
-pub mod draw;
 mod filter;
 mod geometry;
 mod image;
@@ -85,7 +84,8 @@ mod yolox;
 pub use clip::{WorkerHook, analyze_clip, analyze_frames};
 #[cfg(feature = "pose-download")]
 pub use download::{FetchProgress, fetch_model, fetch_model_with};
-pub use filter::{Butterworth, OneEuro, OneEuroParams};
+pub(crate) use filter::Butterworth;
+pub use filter::{OneEuro, OneEuroParams};
 pub use geometry::{BBox, Detection};
 pub use image::{Image, MAX_DECODE_DIMENSION, Rotation, decode_jpeg};
 pub use model::{
