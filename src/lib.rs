@@ -13,7 +13,7 @@
 //! - [`ClipRecorder`] turns frames and [`Trigger`]s into [`Clip`]s. It is pure:
 //!   no threads, no clock of its own. Callers call [`ClipRecorder::poll`] on
 //!   a timer and deduplicate triggers.
-//! - [`write_clip`] stores a clip; [`sidecar::Sidecar`] describes it, with
+//! - [`write_clip`] stores a clip; [`Sidecar`] describes it, with
 //!   the byte offset of every frame inside the AVI.
 //! - [`jpeg::ensure_huffman`] makes webcam frames decodable by strict
 //!   decoders.
@@ -106,7 +106,7 @@ mod test_pattern;
 mod testutil;
 
 #[cfg(not(target_family = "wasm"))]
-pub use avi::AviFile;
+pub use avi::{AviFile, AviReader};
 pub use camera::{Camera, CameraInfo, FormatRequest, list, open};
 #[cfg(not(target_family = "wasm"))]
 pub use capture::{Capture, CaptureConfig, CaptureStats, CaptureStatus};
@@ -117,6 +117,7 @@ pub use recorder::{
     TriggerOutcome,
 };
 pub use ring::Ring;
+pub use sidecar::Sidecar;
 pub use source::{Interrupter, Source};
 #[cfg(not(target_family = "wasm"))]
 pub use storage::{ClipFiles, open_clip, read_sidecar, write_clip};
