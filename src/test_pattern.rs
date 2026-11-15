@@ -301,18 +301,21 @@ fn fill(rgb: &mut [u8], w: usize, x0: usize, y0: usize, cw: usize, ch: usize, c:
     }
 }
 
+/// The slot a paced pattern serves at `now_ns`: `slot`, or the current one
+/// when it fell more than a frame behind (encoding slower than the frame
+/// rate), as a camera drops frames.
+fn slot_at(now_ns: u64, origin_ns: u64, period_ns: u64, slot: u64) -> u64 {
+    let late = now_ns.saturating_sub(origin_ns) / period_ns.max(1);
+    if late > slot + 1 { late } else { slot }
+}
+
 impl Source for TestPattern {
     fn next_frame(&mut self, timeout: Duration) -> Result<Option<Frame>> {
         if self.config.frames.is_some_and(|n| self.seq >= n) {
             return Err(Error::Ended);
         }
         if self.config.paced {
-            // Fell more than a frame behind (encoding slower than the frame
-            // rate): skip to the current slot, as a camera drops frames.
-            let late = clock::now_ns().saturating_sub(self.origin_ns) / self.period_ns.max(1);
-            if late > self.slot + 1 {
-                self.slot = late;
-            }
+            self.slot = slot_at(clock::now_ns(), self.origin_ns, self.period_ns, self.slot);
         }
         let due = self
             .origin_ns
@@ -444,43 +447,19 @@ mod tests {
     }
 
     #[test]
-    fn paced_patterns_honor_the_timeout() {
-        let cfg = TestPatternConfig {
-            paced: true,
-            fps: 1,
-            origin_ns: Some(clock::now_ns()),
-            ..unpaced(32, 32)
-        };
-        let mut p = TestPattern::new(cfg).unwrap();
-        assert!(
-            p.next_frame(Duration::from_millis(10)).unwrap().is_some(),
-            "frame 0 is due"
+    fn a_paced_pattern_more_than_a_frame_behind_skips_to_the_current_slot() {
+        let (origin, period) = (5_000_000_000, 10_000_000);
+        let at = |ms: u64| origin + ms * 1_000_000;
+        assert_eq!(slot_at(at(0), origin, period, 0), 0);
+        assert_eq!(slot_at(at(15), origin, period, 0), 0, "one frame behind");
+        assert_eq!(slot_at(at(25), origin, period, 0), 2, "two behind");
+        assert_eq!(slot_at(at(1000), origin, period, 0), 100, "1 s behind");
+        assert_eq!(slot_at(at(1000), origin, period, 99), 99);
+        assert_eq!(slot_at(at(30), origin, period, 7), 7, "ahead waits");
+        assert_eq!(
+            slot_at(origin - 1, origin, period, 0),
+            0,
+            "before the origin"
         );
-        assert!(
-            p.next_frame(Duration::from_millis(10)).unwrap().is_none(),
-            "frame 1 is 1 s away"
-        );
-    }
-
-    #[test]
-    fn paced_patterns_that_fall_behind_skip_ahead() {
-        let now = clock::now_ns();
-        let cfg = TestPatternConfig {
-            paced: true,
-            fps: 100,
-            origin_ns: Some(now - 1_000_000_000),
-            frames: None,
-            ..unpaced(32, 32)
-        };
-        let mut p = TestPattern::new(cfg).unwrap();
-        let f = p.next_frame(Duration::from_millis(100)).unwrap().unwrap();
-        assert_eq!(f.seq, 0);
-        assert!(
-            f.host_ns >= now - 20_000_000,
-            "stamped near now, not at the origin"
-        );
-        let g = p.next_frame(Duration::from_millis(100)).unwrap().unwrap();
-        assert_eq!(g.seq, 1);
-        assert!(g.host_ns > f.host_ns);
     }
 }

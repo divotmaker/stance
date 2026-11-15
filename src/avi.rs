@@ -818,17 +818,25 @@ impl Source for AviFile {
 /// Sleeps until the host clock reaches `due_ns`, but no longer than
 /// `timeout`. True if `due_ns` was reached.
 pub(crate) fn wait_until(due_ns: u64, timeout: Duration) -> bool {
-    let now = clock::now_ns();
-    if now >= due_ns {
-        return true;
+    let (sleep, due) = wait_for(clock::now_ns(), due_ns, timeout);
+    if !sleep.is_zero() {
+        thread::sleep(sleep);
     }
-    let wait = Duration::from_nanos(due_ns - now);
+    due
+}
+
+/// How long to sleep at `now_ns` for a frame due at `due_ns`, waiting at
+/// most `timeout`, and whether the frame is due after that sleep.
+fn wait_for(now_ns: u64, due_ns: u64, timeout: Duration) -> (Duration, bool) {
+    if now_ns >= due_ns {
+        return (Duration::ZERO, true);
+    }
+    let wait = Duration::from_nanos(due_ns - now_ns);
     if wait > timeout {
-        thread::sleep(timeout);
-        return false;
+        (timeout, false)
+    } else {
+        (wait, true)
     }
-    thread::sleep(wait);
-    true
 }
 
 #[cfg(test)]
@@ -1054,21 +1062,16 @@ mod tests {
     }
 
     #[test]
-    fn paced_playback_waits_for_each_frame() {
-        let dir = TempDir::new("avi-paced");
-        let path = dir.path().join("p.avi");
-        write(&path, &[frame(0), frame(1)]);
-        let start = clock::now_ns() + 2_000_000_000;
-        let mut src = AviFile::open(&path, true).unwrap().with_origin(start);
-        // Due in 2 s; a 10 ms timeout returns nothing.
-        assert!(src.next_frame(Duration::from_millis(10)).unwrap().is_none());
-        let mut src = src.with_origin(clock::now_ns());
-        assert!(
-            src.next_frame(Duration::from_millis(100))
-                .unwrap()
-                .is_some()
+    fn a_paced_frame_waits_until_due_but_no_longer_than_the_timeout() {
+        let ms = Duration::from_millis;
+        assert_eq!(wait_for(50, 50, ms(10)), (Duration::ZERO, true), "due");
+        assert_eq!(wait_for(80, 50, ms(10)), (Duration::ZERO, true), "late");
+        assert_eq!(wait_for(0, 4_000_000, ms(10)), (ms(4), true));
+        assert_eq!(wait_for(0, 10_000_000, ms(10)), (ms(10), true));
+        assert_eq!(
+            wait_for(0, 2_000_000_000, ms(10)),
+            (ms(10), false),
+            "2 s away"
         );
-        let f = src.next_frame(Duration::from_millis(100)).unwrap().unwrap();
-        assert!(clock::now_ns() >= f.host_ns);
     }
 }
