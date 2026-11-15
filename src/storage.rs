@@ -3,6 +3,7 @@
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::avi::{AviParams, AviReader, AviWriter};
 use crate::recorder::Clip;
@@ -140,6 +141,30 @@ fn write_synced(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let mut file = File::create(path)?;
     file.write_all(bytes)?;
     file.sync_all()
+}
+
+/// Writes `json` to `path` through a synced temporary file named for this
+/// process and a rename, so concurrent writers never interleave.
+pub(crate) fn write_json_file(path: &Path, json: &str) -> Result<()> {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let part = path.with_extension(format!(
+        "json.part-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let written = (|| {
+        let mut f = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&part)?;
+        f.write_all(json.as_bytes())?;
+        f.sync_all()
+    })();
+    if let Err(e) = written {
+        let _ = fs::remove_file(&part);
+        return Err(Error::io(format!("writing {}", part.display()), e));
+    }
+    fs::rename(&part, path).map_err(|e| Error::io(format!("renaming {}", part.display()), e))
 }
 
 /// Reads a clip sidecar.

@@ -2,9 +2,8 @@
 
 use std::borrow::Cow;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -15,6 +14,7 @@ use super::posture::unmirror_keypoints;
 use super::smooth::{Smoothing, smooth};
 use super::view::{Guess, guess_handed, guess_view_body};
 use crate::pose::PoseTrack;
+use crate::storage::write_json_file;
 use crate::{Error, Result};
 
 /// The swing-report format version this crate writes.
@@ -362,28 +362,8 @@ impl SwingReport {
     ///
     /// As [`SwingReport::to_json`]; [`Error::Io`] if writing fails.
     pub fn write_beside(&self, clip_avi: &Path) -> Result<PathBuf> {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
         let path = Self::path_for(clip_avi);
-        let part = path.with_extension(format!(
-            "json.part-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        let json = self.to_json()?;
-        let written = (|| {
-            let mut f = fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&part)?;
-            f.write_all(json.as_bytes())?;
-            f.sync_all()
-        })();
-        if let Err(e) = written {
-            let _ = fs::remove_file(&part);
-            return Err(Error::io(format!("writing {}", part.display()), e));
-        }
-        fs::rename(&part, &path)
-            .map_err(|e| Error::io(format!("renaming {}", part.display()), e))?;
+        write_json_file(&path, &self.to_json()?)?;
         Ok(path)
     }
 
