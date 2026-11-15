@@ -21,7 +21,7 @@ use stance::pose::{
     Image, ModelSpec, PoseConfig, PoseModels, RTMPOSE_M_HALPE26, YOLOX_TINY, analyze_clip,
     decode_jpeg, draw,
 };
-use stance::{Clip, ClipId, Frame};
+use stance::{Clip, Frame};
 
 struct Args {
     models: PathBuf,
@@ -185,20 +185,17 @@ fn run() -> Result<(), String> {
         });
     }
     let abs = |rel: i64| sidecar.start_ns.saturating_add_signed(rel);
-    let clip = Clip {
-        id: ClipId(0),
-        tags: vec![stem.clone()],
-        frames,
-        trigger_index: sidecar.trigger_index,
-        impact_index: sidecar.impact_index,
-        trigger_ns: abs(sidecar.trigger_ns),
-        impact_ns: abs(sidecar.impact_ns),
-        complete: sidecar.complete,
-        dropped: sidecar.dropped,
-        truncated: sidecar.truncated,
-        short_buffer: false,
-        fps: sidecar.fps.nominal,
-    };
+    let mut clip = Clip::default();
+    clip.tags = vec![stem.clone()];
+    clip.frames = frames;
+    clip.trigger_index = sidecar.trigger_index;
+    clip.impact_index = sidecar.impact_index;
+    clip.trigger_ns = abs(sidecar.trigger_ns);
+    clip.impact_ns = abs(sidecar.impact_ns);
+    clip.complete = sidecar.complete;
+    clip.dropped = sidecar.dropped;
+    clip.truncated = sidecar.truncated;
+    clip.fps = sidecar.fps.nominal;
     let files = stance::write_clip(&args.out, &name, &clip).map_err(|e| e.to_string())?;
     println!("{}", files.avi.display());
     let pose_path = track.write_beside(&files.avi).map_err(|e| e.to_string())?;

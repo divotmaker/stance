@@ -186,7 +186,8 @@ fn format_value(unit: Unit, v: f64, cm: Option<f64>) -> String {
         (Unit::Degrees, _) => format!("{v:+.1}°"),
         (Unit::Torso, Some(cm)) => format!("{v:+.2} torso ({cm:+.1} cm)"),
         (Unit::Torso, None) => format!("{v:+.2} torso"),
-        (Unit::Ratio, _) => format!("{v:.2}"),
+        // Ratio, and any unit added later.
+        _ => format!("{v:.2}"),
     }
 }
 

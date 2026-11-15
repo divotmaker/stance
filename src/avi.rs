@@ -266,6 +266,7 @@ fn le_u32(b: &[u8], at: usize) -> u32 {
 
 /// Where one frame's data sits in the file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct FrameLocation {
     /// Absolute byte offset of the frame data.
     pub offset: u64,

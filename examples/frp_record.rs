@@ -219,6 +219,7 @@ fn save(args: &Args, events: Vec<RecorderEvent<ShotKey>>) {
             RecorderEvent::Discarded(d) => {
                 eprintln!("discarded clip {:?} ({:?})", d.id, d.reason);
             }
+            _ => {}
         }
     }
 }

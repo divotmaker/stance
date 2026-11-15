@@ -214,20 +214,17 @@ fn sliding_clip(frames: usize) -> Clip<&'static str> {
         })
         .collect();
     let n = frames.len();
-    Clip {
-        id: ClipId(1),
-        tags: vec!["shot"],
-        trigger_ns: frames[n / 2].host_ns,
-        impact_ns: frames[n / 2].host_ns,
-        frames,
-        trigger_index: n / 2,
-        impact_index: n / 2,
-        complete: true,
-        dropped: 0,
-        truncated: false,
-        short_buffer: false,
-        fps: Some(120.0),
-    }
+    let mut clip = Clip::default();
+    clip.id = ClipId(1);
+    clip.tags = vec!["shot"];
+    clip.trigger_ns = frames[n / 2].host_ns;
+    clip.impact_ns = frames[n / 2].host_ns;
+    clip.frames = frames;
+    clip.trigger_index = n / 2;
+    clip.impact_index = n / 2;
+    clip.complete = true;
+    clip.fps = Some(120.0);
+    clip
 }
 
 #[test]

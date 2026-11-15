@@ -11,6 +11,7 @@ use crate::{Error, Result};
 
 /// The files of a written clip.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct ClipFiles {
     /// `<dir>/<name>.avi`.
     pub avi: PathBuf,

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use stance::avi::AviReader;
-use stance::{AviFile, Clip, ClipId, Error, Frame, write_clip};
+use stance::{AviFile, Clip, Error, Frame, write_clip};
 
 /// The system allocator, recording the largest single allocation.
 struct Tracking;
@@ -78,20 +78,16 @@ fn clip() -> Clip<&'static str> {
             height: 8,
         })
         .collect();
-    Clip {
-        id: ClipId(0),
-        tags: vec!["t"],
-        frames,
-        trigger_index: 2,
-        impact_index: 2,
-        trigger_ns: 1_020 * MS,
-        impact_ns: 1_020 * MS,
-        complete: true,
-        dropped: 0,
-        truncated: false,
-        short_buffer: false,
-        fps: Some(100.0),
-    }
+    let mut clip = Clip::default();
+    clip.tags = vec!["t"];
+    clip.frames = frames;
+    clip.trigger_index = 2;
+    clip.impact_index = 2;
+    clip.trigger_ns = 1_020 * MS;
+    clip.impact_ns = 1_020 * MS;
+    clip.complete = true;
+    clip.fps = Some(100.0);
+    clip
 }
 
 /// Opens `path` every way there is and reads every frame, ignoring errors.

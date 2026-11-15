@@ -115,6 +115,7 @@ impl UsbId {
 /// Which control a [`ControlInfo`] describes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum ControlId {
     /// Exposure time (see [`ExposureUnit`]).
     Exposure,
@@ -186,6 +187,7 @@ impl ControlId {
 
 /// A control's range and state, read from the camera.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ControlInfo {
     /// Which control.
     pub id: ControlId,
@@ -213,6 +215,7 @@ pub struct ControlInfo {
 /// The unit of a camera's raw exposure values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum ExposureUnit {
     /// Raw value `v` means `2^v` seconds (UVC through `DirectShow` controls on
     /// Windows), so −7 is 1/128 s.
@@ -256,6 +259,7 @@ impl ExposureUnit {
 /// # Ok::<(), stance::Error>(())
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum FormatRequest {
     /// The highest MJPEG frame rate, then the largest size at that rate.
     #[default]

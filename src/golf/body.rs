@@ -8,6 +8,7 @@ use crate::pose::{Keypoint, Skeleton};
 /// Where the camera stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum View {
     /// Facing the golfer's chest, square to the target line.
     FaceOn,

@@ -135,6 +135,7 @@ pub struct ClipId(pub u64);
 
 /// What a trigger did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TriggerOutcome {
     /// A new clip started.
     Started(ClipId),
@@ -153,6 +154,7 @@ pub enum TriggerOutcome {
 
 /// A finished clip.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct Clip<T> {
     /// The clip's id.
     pub id: ClipId,
@@ -185,6 +187,27 @@ pub struct Clip<T> {
     pub short_buffer: bool,
     /// The recorder's nominal frame rate, if it was given one.
     pub fps: Option<f64>,
+}
+
+/// An empty clip with id 0, for building one field by field, e.g. to store
+/// frames of your own with `write_clip`.
+impl<T> Default for Clip<T> {
+    fn default() -> Self {
+        Self {
+            id: ClipId(0),
+            tags: Vec::new(),
+            frames: Vec::new(),
+            trigger_index: 0,
+            impact_index: 0,
+            trigger_ns: 0,
+            impact_ns: 0,
+            complete: false,
+            dropped: 0,
+            truncated: false,
+            short_buffer: false,
+            fps: None,
+        }
+    }
 }
 
 impl<T> Clip<T> {
@@ -222,6 +245,7 @@ impl<T> Clip<T> {
 
 /// A clip that was dropped without being finished.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Discarded<T> {
     /// The clip's id.
     pub id: ClipId,
@@ -244,6 +268,7 @@ pub enum DiscardReason {
 
 /// A clip leaving the recorder.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum RecorderEvent<T> {
     /// A finished clip.
     Finished(Clip<T>),

@@ -106,7 +106,7 @@ fn clips(events: Vec<RecorderEvent<&'static str>>) -> Vec<Clip<&'static str>> {
         .into_iter()
         .filter_map(|e| match e {
             RecorderEvent::Finished(c) => Some(c),
-            RecorderEvent::Discarded(_) => None,
+            _ => None,
         })
         .collect()
 }

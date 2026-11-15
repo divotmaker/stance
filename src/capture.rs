@@ -68,6 +68,7 @@ impl Default for CaptureConfig {
 
 /// What the capture thread is doing.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum CaptureStatus {
     /// Delivering frames.
     Running,
@@ -80,6 +81,7 @@ pub enum CaptureStatus {
 
 /// Capture counters.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub struct CaptureStats {
     /// Frames delivered since start.
     pub frames: u64,
