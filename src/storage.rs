@@ -3,6 +3,7 @@
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+#[cfg(feature = "pose")]
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::avi::{AviParams, AviReader, AviWriter};
@@ -145,6 +146,7 @@ fn write_synced(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 
 /// Writes `json` to `path` through a synced temporary file named for this
 /// process and a rename, so concurrent writers never interleave.
+#[cfg(feature = "pose")]
 pub(crate) fn write_json_file(path: &Path, json: &str) -> Result<()> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let part = path.with_extension(format!(
