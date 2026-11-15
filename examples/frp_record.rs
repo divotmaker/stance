@@ -152,13 +152,12 @@ fn run(args: &Args) -> Result<(), String> {
 
 /// Pulls frames into the recorder, applies triggers, writes finished clips.
 fn record(args: &Args, capture: &Capture, rx: &Receiver<Trigger<ShotKey>>) -> Result<(), String> {
-    let mut recorder = ClipRecorder::new(RecorderConfig {
-        pre_roll: args.pre,
-        post_roll: args.post,
-        buffer: args.pre + args.lead + Duration::from_secs(2),
-        fps: Some(capture.format().fps()),
-        ..RecorderConfig::default()
-    });
+    let mut config = RecorderConfig::default();
+    config.pre_roll = args.pre;
+    config.post_roll = args.post;
+    config.buffer = args.pre + args.lead + Duration::from_secs(2);
+    config.fps = Some(capture.format().fps());
+    let mut recorder = ClipRecorder::new(config);
     let mut cursor: Option<u64> = None;
     let mut triggers_open = true;
     loop {

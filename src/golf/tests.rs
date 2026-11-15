@@ -660,10 +660,10 @@ fn gaps_are_filled_or_left_empty_never_zero() {
     for f in &mut empty.frames[2..] {
         *f = PoseFrame::empty(f.t_ns);
     }
-    assert!(analyze_swing(&empty, &SwingOptions::default()).is_err());
+    assert!(analyze_swing(&empty, &SwingConfig::default()).is_err());
     let mut backwards = clean;
     backwards.frames.swap(5, 6);
-    assert!(analyze_swing(&backwards, &SwingOptions::default()).is_err());
+    assert!(analyze_swing(&backwards, &SwingConfig::default()).is_err());
 }
 
 #[test]
@@ -673,10 +673,10 @@ fn view_is_guessed_from_the_address_pose() {
     assert_eq!(guess_view(&fo.pose(0.5)).unwrap().value, View::FaceOn);
     assert_eq!(guess_view(&dtl.pose(0.5)).unwrap().value, View::DownTheLine);
     assert!(guess_view(&fo.pose(0.5)).unwrap().confidence > 0.3);
-    let report = analyze_swing(&dtl.track(), &SwingOptions::default()).unwrap();
+    let report = analyze_swing(&dtl.track(), &SwingConfig::default()).unwrap();
     assert_eq!(report.view, Some(View::DownTheLine));
     assert_eq!(report.view_guess.unwrap().value, View::DownTheLine);
-    let report = analyze_swing(&fo.track(), &SwingOptions::default()).unwrap();
+    let report = analyze_swing(&fo.track(), &SwingConfig::default()).unwrap();
     assert_eq!(report.view, Some(View::FaceOn));
     // A given view wins over the guess.
     let forced = analyze_swing(
@@ -1212,7 +1212,7 @@ fn an_ambiguous_view_is_unknown() {
             p.x = cx + squeeze * (p.x - cx);
         }
     }
-    let r = analyze_swing(&track, &SwingOptions::default()).unwrap();
+    let r = analyze_swing(&track, &SwingConfig::default()).unwrap();
     if r.view_guess.is_none() {
         assert_eq!(r.view, None);
         assert!(r.setup().is_none());
@@ -1265,19 +1265,19 @@ fn an_unconfirmed_given_impact_derives_no_swing() {
 }
 
 #[test]
-fn swing_options_json_defaults_missing_fields() {
-    let opts: SwingOptions = serde_json::from_str("{\"handed\":\"left\"}").unwrap();
+fn swing_config_json_defaults_missing_fields() {
+    let opts: SwingConfig = serde_json::from_str("{\"handed\":\"left\"}").unwrap();
     assert_eq!(
         opts,
-        SwingOptions {
+        SwingConfig {
             handed: Handed::Left,
-            ..SwingOptions::default()
+            ..SwingConfig::default()
         }
     );
     let mut full = options(View::DownTheLine, Handed::Right, Some(IMPACT_S));
     full.mirrored = true;
     let json = serde_json::to_string(&full).unwrap();
-    assert_eq!(serde_json::from_str::<SwingOptions>(&json).unwrap(), full);
+    assert_eq!(serde_json::from_str::<SwingConfig>(&json).unwrap(), full);
 }
 
 #[test]

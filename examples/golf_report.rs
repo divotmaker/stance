@@ -34,7 +34,7 @@ use std::process::ExitCode;
 use stance::golf::norms::NormUnit;
 use stance::golf::{
     ClubClass, Context, Grade, Handed, ImpactSource, MetricId, Norms, Positions, Reference, Sex,
-    Smoothing, SwingEvent, SwingOptions, SwingReport, Unit, View, analyze_swing, smooth_track,
+    SwingConfig, SwingEvent, SwingReport, Unit, View, analyze_swing, smooth_track,
 };
 use stance::pose::{
     Image, PoseConfig, PoseFrame, PoseModels, PoseTrack, Rotation, analyze_clip, decode_jpeg, draw,
@@ -479,10 +479,8 @@ fn run() -> Result<(), String> {
     let track = if let Some(path) = &args.track {
         PoseTrack::read(path).map_err(|e| e.to_string())?
     } else {
-        let config = PoseConfig {
-            rotation: args.rotation,
-            ..PoseConfig::default()
-        };
+        let mut config = PoseConfig::default();
+        config.rotation = args.rotation;
         let models = PoseModels::load(&args.models, &config).map_err(|e| e.to_string())?;
         analyze_clip(&models, &args.clip, &config).map_err(|e| e.to_string())?
     };
@@ -492,18 +490,13 @@ fn run() -> Result<(), String> {
         args.impact_ns
             .or_else(|| u64::try_from(sidecar.impact_ns).ok())
     };
-    let report = analyze_swing(
-        &track,
-        &SwingOptions {
-            view: args.view,
-            handed: args.handed,
-            impact_ns,
-            height_cm: args.height_cm,
-            mirrored: args.mirrored,
-            smoothing: Smoothing::default(),
-        },
-    )
-    .map_err(|e| e.to_string())?;
+    let mut config = SwingConfig::default();
+    config.view = args.view;
+    config.handed = args.handed;
+    config.impact_ns = impact_ns;
+    config.height_cm = args.height_cm;
+    config.mirrored = args.mirrored;
+    let report = analyze_swing(&track, &config).map_err(|e| e.to_string())?;
     let grades = match &args.grade {
         Some(ctx) => {
             let norms = Norms::builtin().map_err(|e| e.to_string())?;

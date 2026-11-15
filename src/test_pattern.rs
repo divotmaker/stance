@@ -19,6 +19,7 @@ const MAX_FPS: u32 = 1000;
 
 /// Test pattern settings.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct TestPatternConfig {
     /// Frame width (16..=65535).
     pub width: u32,
@@ -63,13 +64,12 @@ impl Default for TestPatternConfig {
 /// use std::time::Duration;
 /// use stance::{Source, TestPattern, TestPatternConfig};
 ///
-/// let mut pattern = TestPattern::new(TestPatternConfig {
-///     width: 160,
-///     height: 120,
-///     fps: 60,
-///     paced: false,
-///     ..TestPatternConfig::default()
-/// })?;
+/// let mut config = TestPatternConfig::default();
+/// config.width = 160;
+/// config.height = 120;
+/// config.fps = 60;
+/// config.paced = false;
+/// let mut pattern = TestPattern::new(config)?;
 /// let frame = pattern.next_frame(Duration::ZERO)?.expect("unpaced patterns never wait");
 /// assert_eq!((frame.width, frame.height), (160, 120));
 /// assert_eq!(&frame.jpeg[..2], &[0xFF, 0xD8]);

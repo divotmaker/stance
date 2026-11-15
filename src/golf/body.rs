@@ -93,7 +93,7 @@ impl Joint {
 ///   ball on the image's **right** (+x); a left-hander faces left (−x).
 ///
 /// A mirrored image (a selfie-style preview) swaps both: a right-hander then
-/// looks left-handed. [`SwingOptions::mirrored`](super::SwingOptions::mirrored)
+/// looks left-handed. [`SwingConfig::mirrored`](super::SwingConfig::mirrored)
 /// and [`unmirror`](super::unmirror) undo it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Setup {

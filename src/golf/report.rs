@@ -27,7 +27,8 @@ pub const MAX_SWING_REPORT_BYTES: u64 = 4 << 20;
 
 /// What the caller knows about the swing.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct SwingOptions {
+#[non_exhaustive]
+pub struct SwingConfig {
     /// The camera view; `None` guesses it from the address pose. When the
     /// guess is unsure too, only the metrics that work in either view are
     /// measured.
@@ -44,7 +45,7 @@ pub struct SwingOptions {
     /// The golfer's height (cm), for distances in centimeters.
     pub height_cm: Option<f64>,
     /// The track comes from a mirrored image (a selfie-style preview): it is
-    /// unmirrored before analysis, so [`SwingOptions::handed`] is the
+    /// unmirrored before analysis, so [`SwingConfig::handed`] is the
     /// golfer's true hand and the report describes the real swing. `false`
     /// when absent from JSON.
     #[serde(default)]
@@ -54,7 +55,7 @@ pub struct SwingOptions {
     pub smoothing: Smoothing,
 }
 
-impl Default for SwingOptions {
+impl Default for SwingConfig {
     /// View guessed, right-handed, impact estimated, no height, not
     /// mirrored.
     fn default() -> Self {
@@ -126,7 +127,7 @@ pub struct SwingReport {
     /// The golfer's handedness (the true hand, also for a mirrored image).
     pub handed: Handed,
     /// Whether the track came from a mirrored image
-    /// ([`SwingOptions::mirrored`]).
+    /// ([`SwingConfig::mirrored`]).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub mirrored: bool,
     /// The view the address pose suggests (whether or not the caller gave
@@ -200,7 +201,7 @@ fn unmirror_track(track: &PoseTrack) -> PoseTrack {
 
 /// Analyzes one swing from its clip's pose track.
 ///
-/// 1. A mirrored track ([`SwingOptions::mirrored`]) is unmirrored.
+/// 1. A mirrored track ([`SwingConfig::mirrored`]) is unmirrored.
 /// 2. Keypoints are cleaned and smoothed ([`Smoothing`]).
 /// 3. The impact is found from the hands ([`SwingEvents`]): the given time
 ///    refined against them, or estimated.
@@ -216,7 +217,7 @@ fn unmirror_track(track: &PoseTrack) -> PoseTrack {
 /// [`Error::InvalidArgument`] for a skeleton other than Halpe-26, frame
 /// times that go backwards, bad [`Smoothing`] filter parameters, or a track
 /// with fewer than three frames with a person.
-pub fn analyze_swing(track: &PoseTrack, options: &SwingOptions) -> Result<SwingReport> {
+pub fn analyze_swing(track: &PoseTrack, config: &SwingConfig) -> Result<SwingReport> {
     let posed = track
         .frames
         .iter()
@@ -227,22 +228,22 @@ pub fn analyze_swing(track: &PoseTrack, options: &SwingOptions) -> Result<SwingR
             "swing analysis needs at least 3 frames with a person, the track has {posed}"
         )));
     }
-    let track = if options.mirrored {
+    let track = if config.mirrored {
         Cow::Owned(unmirror_track(track))
     } else {
         Cow::Borrowed(track)
     };
-    let handed = options.handed;
+    let handed = config.handed;
     // The impact is found on the track smoothed in one piece, so where a
     // given time falls doesn't move it; the events are then found on the
     // track smoothed apart either side of that impact.
-    let mut frames = smooth(&track, handed, &options.smoothing, None)?;
-    let hint = options
+    let mut frames = smooth(&track, handed, &config.smoothing, None)?;
+    let hint = config
         .impact_ns
         .map_or(ImpactHint::Estimate, ImpactHint::Prior);
     let mut events = detect(&frames, hint);
     if let Some(found) = events.impact {
-        frames = smooth(&track, handed, &options.smoothing, Some(found.t_ns))?;
+        frames = smooth(&track, handed, &config.smoothing, Some(found.t_ns))?;
         events = detect(&frames, ImpactHint::Known(found, events.impact_source));
     }
     let keys = KeyFrames {
@@ -259,7 +260,7 @@ pub fn analyze_swing(track: &PoseTrack, options: &SwingOptions) -> Result<SwingR
         (0..end).rev().find(|&i| frames.bodies[i].torso().is_some())
     });
     let view_guess = reference.and_then(|i| guess_view_body(&frames.bodies[i]));
-    let view = options.view.or(view_guess.map(|g| g.value));
+    let view = config.view.or(view_guess.map(|g| g.value));
     // An unconfirmed impact found no swing to check the hand against.
     let swing_found = events.impact_source != ImpactSource::Given;
     let handed_guess = view.filter(|_| swing_found).and_then(|view| {
@@ -269,7 +270,7 @@ pub fn analyze_swing(track: &PoseTrack, options: &SwingOptions) -> Result<SwingR
             events.top.map(|e| (&frames.bodies[e.frame], e.confidence)),
         )
     });
-    let scale = BodyScale::measure(&frames, keys.address, options.height_cm);
+    let scale = BodyScale::measure(&frames, keys.address, config.height_cm);
     let (metrics, series) = scale.map_or_else(
         || (Vec::new(), Series::default()),
         |s| measure(&frames, keys, view.map(|view| Setup { view, handed }), s),
@@ -278,11 +279,11 @@ pub fn analyze_swing(track: &PoseTrack, options: &SwingOptions) -> Result<SwingR
         version: SWING_REPORT_VERSION,
         view,
         handed,
-        mirrored: options.mirrored,
+        mirrored: config.mirrored,
         view_guess,
         handed_guess,
-        height_cm: options.height_cm,
-        smoothing: options.smoothing,
+        height_cm: config.height_cm,
+        smoothing: config.smoothing,
         scale,
         tempo: Tempo::from_events(&events),
         events,

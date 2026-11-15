@@ -40,7 +40,7 @@
 //! direction is toward the target (face-on: +x for a right-hander) or the
 //! ball (down the line: +x for a right-hander). A mirrored image (a
 //! selfie-style preview) makes a right-hander look left-handed:
-//! [`SwingOptions::mirrored`] and [`unmirror`] analyze it with the golfer's
+//! [`SwingConfig::mirrored`] and [`unmirror`] analyze it with the golfer's
 //! true hand.
 //!
 //! # 2D proxies
@@ -58,17 +58,16 @@
 //!
 //! ```no_run
 //! use std::path::Path;
-//! use stance::golf::{Handed, SwingOptions, View, analyze_swing};
+//! use stance::golf::{Handed, SwingConfig, View, analyze_swing};
 //! use stance::pose::PoseTrack;
 //!
 //! let track = PoseTrack::read(Path::new("clips/shot-0001.pose.json"))?;
-//! let report = analyze_swing(&track, &SwingOptions {
-//!     view: Some(View::FaceOn),
-//!     handed: Handed::Right,
-//!     impact_ns: Some(2_035_366_667), // from the sidecar / launch monitor
-//!     height_cm: Some(180.0),
-//!     ..SwingOptions::default()
-//! })?;
+//! let mut config = SwingConfig::default();
+//! config.view = Some(View::FaceOn);
+//! config.handed = Handed::Right;
+//! config.impact_ns = Some(2_035_366_667); // from the sidecar / launch monitor
+//! config.height_cm = Some(180.0);
+//! let report = analyze_swing(&track, &config)?;
 //! if let Some(tempo) = report.tempo {
 //!     println!("tempo {:.1}:1", tempo.ratio);
 //! }
@@ -93,7 +92,7 @@ pub use metrics::{
 pub use norms::{ClubClass, Context, Fit, Grade, Norms, Position, Reference, Sex, Side};
 pub use posture::{HeadShift, Posture, PostureFilter, posture, unmirror};
 pub use report::{
-    MAX_SWING_REPORT_BYTES, SWING_REPORT_VERSION, SwingOptions, SwingReport, analyze_swing,
+    MAX_SWING_REPORT_BYTES, SWING_REPORT_VERSION, SwingConfig, SwingReport, analyze_swing,
 };
 pub use smooth::{Smoothing, smooth_track};
 pub use view::{Guess, guess_view};

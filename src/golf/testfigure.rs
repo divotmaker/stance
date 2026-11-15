@@ -465,8 +465,8 @@ pub(super) fn mirrored(track: &PoseTrack) -> PoseTrack {
     out
 }
 
-pub(super) fn options(view: View, handed: Handed, impact: Option<f64>) -> SwingOptions {
-    SwingOptions {
+pub(super) fn options(view: View, handed: Handed, impact: Option<f64>) -> SwingConfig {
+    SwingConfig {
         view: Some(view),
         handed,
         impact_ns: impact.map(t_ns),

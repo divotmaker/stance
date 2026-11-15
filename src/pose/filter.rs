@@ -15,6 +15,7 @@ use crate::{Error, Result};
 /// higher `beta` cuts lag when it moves fast. Speeds are in the signal's units
 /// per second (pixels per second for keypoints).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OneEuroParams {
     /// Cutoff at rest (Hz).
     pub min_cutoff: f64,

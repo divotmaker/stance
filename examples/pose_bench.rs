@@ -92,11 +92,9 @@ fn usage() -> String {
 fn parse_args() -> Result<Args, String> {
     let mut positional = Vec::new();
     let mut json = None;
-    let mut config = PoseConfig {
-        pose_model: RTMPOSE_M_HALPE26,
-        detector: YOLOX_TINY,
-        ..PoseConfig::default()
-    };
+    let mut config = PoseConfig::default();
+    config.pose_model = RTMPOSE_M_HALPE26;
+    config.detector = YOLOX_TINY;
     let mut samples = 40;
     let mut it = std::env::args().skip(1);
     let spec = |name: Option<String>| -> Result<ModelSpec, String> {

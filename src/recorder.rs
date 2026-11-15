@@ -14,6 +14,7 @@ use crate::ring::{Ring, duration_ns};
 
 /// Recorder settings.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct RecorderConfig {
     /// Time kept before the impact estimate. Default 4 s.
     pub pre_roll: Duration,
@@ -307,11 +308,9 @@ struct OpenClip<T> {
 /// # use std::time::Duration;
 /// use stance::{ClipRecorder, Frame, RecorderConfig, RecorderEvent, Trigger, TriggerOutcome};
 ///
-/// let config = RecorderConfig {
-///     pre_roll: Duration::from_millis(200),
-///     post_roll: Duration::from_millis(100),
-///     ..RecorderConfig::default()
-/// };
+/// let mut config = RecorderConfig::default();
+/// config.pre_roll = Duration::from_millis(200);
+/// config.post_roll = Duration::from_millis(100);
 /// let mut rec = ClipRecorder::new(config);
 /// let frame = |seq: u64| Frame {
 ///     jpeg: Arc::from(vec![0u8; 16]),

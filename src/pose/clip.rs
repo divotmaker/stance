@@ -30,12 +30,10 @@ pub(crate) const DECODE_BUDGET: usize = 256 * 1024 * 1024;
 /// ```
 /// use stance::pose::{PoseConfig, WorkerHook};
 ///
-/// let config = PoseConfig {
-///     on_worker_start: Some(WorkerHook::new(|| {
-///         // e.g. lower the calling thread's priority
-///     })),
-///     ..PoseConfig::default()
-/// };
+/// let mut config = PoseConfig::default();
+/// config.on_worker_start = Some(WorkerHook::new(|| {
+///     // e.g. lower the calling thread's priority
+/// }));
 /// # let _ = config;
 /// ```
 #[derive(Clone)]

@@ -299,6 +299,7 @@ pub trait PersonDetector: Send {
 
 /// Pose settings shared by the live tracker and the clip pass.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct PoseConfig {
     /// The pose model.
     pub pose_model: ModelSpec,

@@ -235,12 +235,10 @@ fn sliding_clip(frames: usize) -> Clip<&'static str> {
 fn analyze_clip_tracks_a_generated_clip() {
     let test = "analyze_clip_tracks_a_generated_clip";
     let Some(dir) = model_dir(test) else { return };
-    let config = PoseConfig {
-        pose_model: RTMPOSE_S_HALPE26,
-        detect_every: 5,
-        threads: 3,
-        ..PoseConfig::default()
-    };
+    let mut config = PoseConfig::default();
+    config.pose_model = RTMPOSE_S_HALPE26;
+    config.detect_every = 5;
+    config.threads = 3;
     if !has(&dir, &config.pose_model, test) || !has(&dir, &config.detector, test) {
         return;
     }

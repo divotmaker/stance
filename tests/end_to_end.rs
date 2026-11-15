@@ -54,27 +54,23 @@ fn decode(jpeg: &[u8]) -> (usize, usize) {
 /// trigger is applied once the first frame at or after `at_ms` arrives, as a
 /// live trigger would be.
 fn record(triggers: &[(u64, &'static str, &'static str)]) -> Vec<RecorderEvent<&'static str>> {
-    let pattern = TestPatternConfig {
-        width: 96,
-        height: 64,
-        fps: 100,
-        paced: false,
-        frames: Some(300),
-        origin_ns: Some(ORIGIN),
-        quality: 70,
-    };
+    let mut pattern = TestPatternConfig::default();
+    pattern.width = 96;
+    pattern.height = 64;
+    pattern.fps = 100;
+    pattern.paced = false;
+    pattern.frames = Some(300);
+    pattern.origin_ns = Some(ORIGIN);
+    pattern.quality = 70;
     // The ring holds the whole run, so the unpaced source can't outrun us.
-    let config = CaptureConfig {
-        ring_duration: Duration::from_secs(10),
-        ..CaptureConfig::default()
-    };
+    let mut config = CaptureConfig::default();
+    config.ring_duration = Duration::from_secs(10);
     let capture = Capture::start(config, move || TestPattern::new(pattern)).unwrap();
-    let mut recorder = ClipRecorder::new(RecorderConfig {
-        pre_roll: Duration::from_millis(500),
-        post_roll: Duration::from_millis(500),
-        fps: Some(capture.format().fps()),
-        ..RecorderConfig::default()
-    });
+    let mut recorder_config = RecorderConfig::default();
+    recorder_config.pre_roll = Duration::from_millis(500);
+    recorder_config.post_roll = Duration::from_millis(500);
+    recorder_config.fps = Some(capture.format().fps());
+    let mut recorder = ClipRecorder::new(recorder_config);
     let mut pending = triggers.to_vec();
     let mut events = Vec::new();
     let mut cursor = None;

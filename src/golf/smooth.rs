@@ -17,6 +17,7 @@ use crate::{Error, Result};
 /// frame interval: frames are not resampled, so a camera that drops frames
 /// gets a hole treated as one step (clip times are regular in practice).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Smoothing {
     /// Keypoints scoring below this are gaps.
     pub min_score: f32,

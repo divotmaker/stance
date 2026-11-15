@@ -40,11 +40,9 @@ fn usage() -> String {
 fn parse_args() -> Result<Args, String> {
     let mut positional = Vec::new();
     let mut suffix = "-pose".to_owned();
-    let mut config = PoseConfig {
-        pose_model: RTMPOSE_M_HALPE26,
-        detector: YOLOX_TINY,
-        ..PoseConfig::default()
-    };
+    let mut config = PoseConfig::default();
+    config.pose_model = RTMPOSE_M_HALPE26;
+    config.detector = YOLOX_TINY;
     let spec = |name: Option<String>| -> Result<ModelSpec, String> {
         let name = name.ok_or_else(usage)?;
         ModelSpec::find(&name)

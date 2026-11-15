@@ -32,6 +32,7 @@ const STOP_WAIT: Duration = Duration::from_secs(3);
 
 /// Capture settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct CaptureConfig {
     /// How much history the hand-off ring keeps. Consumers must pull more
     /// often than this. Default 2 s.
@@ -242,7 +243,10 @@ impl Shared {
 /// use std::time::Duration;
 /// use stance::{Capture, CaptureConfig, TestPattern, TestPatternConfig};
 ///
-/// let pattern = TestPatternConfig { width: 64, height: 48, fps: 100, ..TestPatternConfig::default() };
+/// let mut pattern = TestPatternConfig::default();
+/// pattern.width = 64;
+/// pattern.height = 48;
+/// pattern.fps = 100;
 /// let capture = Capture::start(CaptureConfig::default(), move || TestPattern::new(pattern))?;
 /// let frames = capture.wait_frames_after(None, Duration::from_secs(2));
 /// assert!(!frames.is_empty());

@@ -43,13 +43,15 @@
 //!     TestPatternConfig, Trigger,
 //! };
 //!
-//! let pattern = TestPatternConfig { width: 64, height: 48, fps: 100, ..TestPatternConfig::default() };
+//! let mut pattern = TestPatternConfig::default();
+//! pattern.width = 64;
+//! pattern.height = 48;
+//! pattern.fps = 100;
 //! let capture = Capture::start(CaptureConfig::default(), move || TestPattern::new(pattern))?;
-//! let mut recorder = ClipRecorder::new(RecorderConfig {
-//!     pre_roll: Duration::from_millis(100),
-//!     post_roll: Duration::from_millis(100),
-//!     ..RecorderConfig::default()
-//! });
+//! let mut config = RecorderConfig::default();
+//! config.pre_roll = Duration::from_millis(100);
+//! config.post_roll = Duration::from_millis(100);
+//! let mut recorder = ClipRecorder::new(config);
 //!
 //! let mut cursor = None;
 //! let mut triggered = false;

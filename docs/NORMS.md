@@ -120,7 +120,7 @@ reads that much low against these bands, and a top turn that much high.
 
 ## Distances and the golfer's height
 
-Distance bands are in inches. With the golfer's height (`SwingOptions::
+Distance bands are in inches. With the golfer's height (`SwingConfig::
 height_cm`) the report has centimeters and the grade is measured. Without
 it, the engine assumes 177 cm for a man and 164 cm for a woman (US adult
 means; the tour tables don't publish their populations' heights), scales
