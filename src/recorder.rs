@@ -392,16 +392,6 @@ impl<T> ClipRecorder<T> {
         self.config = config;
     }
 
-    /// Sets the pre-roll for later triggers.
-    pub fn set_pre_roll(&mut self, pre_roll: Duration) {
-        self.config.pre_roll = pre_roll;
-    }
-
-    /// Sets the post-roll for later triggers.
-    pub fn set_post_roll(&mut self, post_roll: Duration) {
-        self.config.post_roll = post_roll;
-    }
-
     /// The pre-roll ring.
     #[must_use]
     pub fn ring(&self) -> &Ring {

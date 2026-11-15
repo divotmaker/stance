@@ -165,8 +165,6 @@ impl TestPattern {
             name: TEST_PATTERN_NAME.to_owned(),
             usb: None,
             formats: Self::modes(),
-            controls: Vec::new(),
-            exposure_unit: None,
             probe_error: None,
         }
     }

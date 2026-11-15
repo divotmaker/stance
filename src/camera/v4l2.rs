@@ -5,9 +5,7 @@
 //! buffers the driver marks as failed (`V4L2_BUF_FLAG_ERROR`, a USB transfer
 //! error) or empty are re-queued and skipped;
 //! the driver's buffer timestamp becomes the device time when the driver says
-//! it is monotonic. Exposure is `EXPOSURE_ABSOLUTE` in 100 µs units, with
-//! `EXPOSURE_AUTO` folded in as the auto flag (likewise gain/autogain, white
-//! balance, focus).
+//! it is monotonic.
 
 // The ioctl structs mirror <linux/videodev2.h> for 64-bit targets (this
 // backend is only built there); their sizes are checked in the tests.
@@ -25,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::{CameraInfo, ControlId, ControlInfo, Device, ExposureUnit, RawFrame, UsbId};
+use super::{CameraInfo, Device, RawFrame, UsbId};
 use crate::{Error, Format, Result, clock};
 
 pub(super) const SUPPORTED: bool = true;
@@ -37,80 +35,11 @@ const CAP_STREAMING: u32 = 0x0400_0000;
 const CAP_DEVICE_CAPS: u32 = 0x8000_0000;
 const FRMSIZE_TYPE_DISCRETE: u32 = 1;
 const FRMIVAL_TYPE_DISCRETE: u32 = 1;
-const CTRL_FLAG_DISABLED: u32 = 0x1;
-const CTRL_FLAG_NEXT_CTRL: u32 = 0x8000_0000;
-const CTRL_TYPE_INTEGER: u32 = 1;
-const CTRL_TYPE_BOOLEAN: u32 = 2;
-const CTRL_TYPE_MENU: u32 = 3;
-const CTRL_TYPE_INTEGER_MENU: u32 = 9;
 const BUFFER_COUNT: u32 = 6;
 const BUF_FLAG_ERROR: u32 = 0x0000_0040;
 const BUF_FLAG_TIMESTAMP_MASK: u32 = 0x0000_e000;
 const BUF_FLAG_TIMESTAMP_MONOTONIC: u32 = 0x0000_2000;
 const FIELD_NONE: u32 = 1;
-
-// Control ids.
-const CID_BASE: u32 = 0x0098_0900;
-const CID_BRIGHTNESS: u32 = CID_BASE;
-const CID_CONTRAST: u32 = CID_BASE + 1;
-const CID_SATURATION: u32 = CID_BASE + 2;
-const CID_HUE: u32 = CID_BASE + 3;
-const CID_AUTO_WHITE_BALANCE: u32 = CID_BASE + 12;
-const CID_GAMMA: u32 = CID_BASE + 16;
-const CID_AUTOGAIN: u32 = CID_BASE + 18;
-const CID_GAIN: u32 = CID_BASE + 19;
-const CID_POWER_LINE_FREQUENCY: u32 = CID_BASE + 24;
-const CID_WHITE_BALANCE_TEMPERATURE: u32 = CID_BASE + 26;
-const CID_SHARPNESS: u32 = CID_BASE + 27;
-const CID_BACKLIGHT_COMPENSATION: u32 = CID_BASE + 28;
-const CID_CAMERA_BASE: u32 = 0x009a_0900;
-const CID_EXPOSURE_AUTO: u32 = CID_CAMERA_BASE + 1;
-const CID_EXPOSURE_ABSOLUTE: u32 = CID_CAMERA_BASE + 2;
-const CID_PAN_ABSOLUTE: u32 = CID_CAMERA_BASE + 8;
-const CID_TILT_ABSOLUTE: u32 = CID_CAMERA_BASE + 9;
-const CID_FOCUS_ABSOLUTE: u32 = CID_CAMERA_BASE + 10;
-const CID_FOCUS_AUTO: u32 = CID_CAMERA_BASE + 12;
-const CID_ZOOM_ABSOLUTE: u32 = CID_CAMERA_BASE + 13;
-const CID_IRIS_ABSOLUTE: u32 = CID_CAMERA_BASE + 17;
-
-/// `V4L2_EXPOSURE_MANUAL`; every other `EXPOSURE_AUTO` value is an automatic mode.
-const EXPOSURE_MANUAL: i64 = 1;
-
-/// Common controls: (value control, optional auto control, id).
-const MAPPED: [(u32, Option<u32>, ControlId); 16] = [
-    (
-        CID_EXPOSURE_ABSOLUTE,
-        Some(CID_EXPOSURE_AUTO),
-        ControlId::Exposure,
-    ),
-    (CID_GAIN, Some(CID_AUTOGAIN), ControlId::Gain),
-    (
-        CID_WHITE_BALANCE_TEMPERATURE,
-        Some(CID_AUTO_WHITE_BALANCE),
-        ControlId::WhiteBalance,
-    ),
-    (CID_FOCUS_ABSOLUTE, Some(CID_FOCUS_AUTO), ControlId::Focus),
-    (CID_BRIGHTNESS, None, ControlId::Brightness),
-    (CID_CONTRAST, None, ControlId::Contrast),
-    (CID_SATURATION, None, ControlId::Saturation),
-    (CID_HUE, None, ControlId::Hue),
-    (CID_GAMMA, None, ControlId::Gamma),
-    (CID_SHARPNESS, None, ControlId::Sharpness),
-    (
-        CID_BACKLIGHT_COMPENSATION,
-        None,
-        ControlId::BacklightCompensation,
-    ),
-    (
-        CID_POWER_LINE_FREQUENCY,
-        None,
-        ControlId::PowerLineFrequency,
-    ),
-    (CID_ZOOM_ABSOLUTE, None, ControlId::Zoom),
-    (CID_PAN_ABSOLUTE, None, ControlId::Pan),
-    (CID_TILT_ABSOLUTE, None, ControlId::Tilt),
-    (CID_IRIS_ABSOLUTE, None, ControlId::Iris),
-];
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -158,37 +87,6 @@ struct FrmIvalEnum {
     /// Discrete: `[num, den]`; stepwise: `[min_num, min_den, max_num, max_den, step_num, step_den]`.
     u: [u32; 6],
     reserved: [u32; 2],
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct QueryCtrl {
-    id: u32,
-    type_: u32,
-    name: [u8; 32],
-    minimum: i32,
-    maximum: i32,
-    step: i32,
-    default_value: i32,
-    flags: u32,
-    reserved: [u32; 2],
-}
-
-#[repr(C, packed)]
-#[derive(Clone, Copy)]
-struct QueryMenu {
-    id: u32,
-    index: u32,
-    /// name[32] for menus, an i64 value for integer menus.
-    name: [u8; 32],
-    reserved: u32,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct Control {
-    id: u32,
-    value: i32,
 }
 
 #[repr(C)]
@@ -316,9 +214,6 @@ const VIDIOC_DQBUF: c_ulong = ioc(RW, 17, size_of::<Buffer>());
 const VIDIOC_STREAMON: c_ulong = ioc(W, 18, size_of::<c_int>());
 const VIDIOC_STREAMOFF: c_ulong = ioc(W, 19, size_of::<c_int>());
 const VIDIOC_S_PARM: c_ulong = ioc(RW, 22, size_of::<StreamParm>());
-const VIDIOC_G_CTRL: c_ulong = ioc(RW, 27, size_of::<Control>());
-const VIDIOC_QUERYCTRL: c_ulong = ioc(RW, 36, size_of::<QueryCtrl>());
-const VIDIOC_QUERYMENU: c_ulong = ioc(RW, 37, size_of::<QueryMenu>());
 const VIDIOC_ENUM_FRAMESIZES: c_ulong = ioc(RW, 74, size_of::<FrmSizeEnum>());
 const VIDIOC_ENUM_FRAMEINTERVALS: c_ulong = ioc(RW, 75, size_of::<FrmIvalEnum>());
 
@@ -510,22 +405,17 @@ fn usb_id(node: &Path) -> Option<UsbId> {
     })
 }
 
-/// Reads a node's modes and controls through an open descriptor.
+/// Reads a node's modes through an open descriptor.
 fn describe(node: &Node, id: String, fd: Result<&Fd, String>) -> CameraInfo {
     let mut info = CameraInfo {
         id,
         name: node.card.clone(),
         usb: usb_id(&node.path),
         formats: Vec::new(),
-        controls: Vec::new(),
-        exposure_unit: Some(ExposureUnit::HundredMicros),
         probe_error: None,
     };
     match fd {
-        Ok(fd) => {
-            info.formats = list_formats(fd);
-            info.controls = list_controls(fd);
-        }
+        Ok(fd) => info.formats = list_formats(fd),
         Err(e) => info.probe_error = Some(e),
     }
     info
@@ -650,109 +540,6 @@ fn frame_rates(fd: &Fd, pixfmt: u32, w: u32, h: u32) -> Vec<(u32, u32)> {
         }
     }
     out
-}
-
-fn query(fd: &Fd, cid: u32) -> Option<QueryCtrl> {
-    let mut q: QueryCtrl = zeroed();
-    q.id = cid;
-    fd.ioctl(VIDIOC_QUERYCTRL, &mut q).ok()?;
-    (q.flags & CTRL_FLAG_DISABLED == 0).then_some(q)
-}
-
-fn get(fd: &Fd, cid: u32) -> Option<i64> {
-    let mut c = Control { id: cid, value: 0 };
-    fd.ioctl(VIDIOC_G_CTRL, &mut c).ok()?;
-    Some(c.value.into())
-}
-
-fn menu(fd: &Fd, q: &QueryCtrl) -> Vec<(i64, String)> {
-    if q.type_ != CTRL_TYPE_MENU && q.type_ != CTRL_TYPE_INTEGER_MENU {
-        return Vec::new();
-    }
-    let mut out = Vec::new();
-    for i in q.minimum.max(0)..=q.maximum.min(64) {
-        let mut m: QueryMenu = zeroed();
-        m.id = q.id;
-        m.index = i as u32;
-        if fd.ioctl(VIDIOC_QUERYMENU, &mut m).is_ok() {
-            let name = m.name;
-            let label = if q.type_ == CTRL_TYPE_MENU {
-                cstr(&name)
-            } else {
-                let mut v = [0u8; 8];
-                v.copy_from_slice(&name[..8]);
-                i64::from_le_bytes(v).to_string()
-            };
-            out.push((i64::from(i), label));
-        }
-    }
-    out
-}
-
-fn info_for(fd: &Fd, q: &QueryCtrl, id: ControlId, auto_cid: Option<u32>) -> ControlInfo {
-    let auto_q = auto_cid.and_then(|c| query(fd, c));
-    let auto = auto_q.as_ref().and_then(|aq| get(fd, aq.id)).map(|v| {
-        if auto_cid == Some(CID_EXPOSURE_AUTO) {
-            v != EXPOSURE_MANUAL
-        } else {
-            v != 0
-        }
-    });
-    let name = id
-        .common_name()
-        .map_or_else(|| slug(&cstr(&q.name)), str::to_owned);
-    ControlInfo {
-        id,
-        name,
-        min: q.minimum.into(),
-        max: q.maximum.into(),
-        step: q.step.into(),
-        default: q.default_value.into(),
-        current: get(fd, q.id),
-        auto_supported: auto_q.is_some(),
-        auto,
-        menu: menu(fd, q),
-    }
-}
-
-fn list_controls(fd: &Fd) -> Vec<ControlInfo> {
-    let folded: Vec<u32> = MAPPED.iter().filter_map(|(_, a, _)| *a).collect();
-    let mut out = Vec::new();
-    let mut id = 0u32;
-    loop {
-        let mut q: QueryCtrl = zeroed();
-        q.id = id | CTRL_FLAG_NEXT_CTRL;
-        if fd.ioctl(VIDIOC_QUERYCTRL, &mut q).is_err() || q.id == id {
-            break;
-        }
-        id = q.id;
-        let usable = matches!(
-            q.type_,
-            CTRL_TYPE_INTEGER | CTRL_TYPE_BOOLEAN | CTRL_TYPE_MENU | CTRL_TYPE_INTEGER_MENU
-        );
-        if q.flags & CTRL_FLAG_DISABLED != 0 || !usable || folded.contains(&q.id) {
-            continue;
-        }
-        let (cid_id, auto) = MAPPED
-            .iter()
-            .find(|(c, _, _)| *c == q.id)
-            .map_or((ControlId::Other(q.id), None), |&(_, a, i)| (i, a));
-        out.push(info_for(fd, &q, cid_id, auto));
-    }
-    out
-}
-
-/// `White Balance Temperature, Auto` → `white_balance_temperature_auto`.
-fn slug(s: &str) -> String {
-    let mut out = String::new();
-    for c in s.chars() {
-        if c.is_ascii_alphanumeric() {
-            out.push(c.to_ascii_lowercase());
-        } else if !out.ends_with('_') {
-            out.push('_');
-        }
-    }
-    out.trim_matches('_').to_owned()
 }
 
 struct MappedBuffer {
@@ -937,9 +724,6 @@ mod tests {
         assert_eq!(size_of::<FmtDesc>(), 64);
         assert_eq!(size_of::<FrmSizeEnum>(), 44);
         assert_eq!(size_of::<FrmIvalEnum>(), 52);
-        assert_eq!(size_of::<QueryCtrl>(), 68);
-        assert_eq!(size_of::<QueryMenu>(), 44);
-        assert_eq!(size_of::<Control>(), 8);
         assert_eq!(size_of::<V4l2Format>(), 208);
         assert_eq!(size_of::<StreamParm>(), 204);
         assert_eq!(size_of::<RequestBuffers>(), 20);
@@ -958,9 +742,6 @@ mod tests {
         assert_eq!(VIDIOC_DQBUF, 0xc058_5611);
         assert_eq!(VIDIOC_STREAMON, 0x4004_5612);
         assert_eq!(VIDIOC_S_PARM, 0xc0cc_5616);
-        assert_eq!(VIDIOC_G_CTRL, 0xc008_561b);
-        assert_eq!(VIDIOC_QUERYCTRL, 0xc044_5624);
-        assert_eq!(VIDIOC_QUERYMENU, 0xc02c_5625);
         assert_eq!(VIDIOC_ENUM_FRAMESIZES, 0xc02c_564a);
         assert_eq!(VIDIOC_ENUM_FRAMEINTERVALS, 0xc034_564b);
     }
@@ -969,15 +750,6 @@ mod tests {
     fn fourcc_round_trip() {
         assert_eq!(fourcc_str(fourcc_code("MJPG")), "MJPG");
         assert_eq!(fourcc_code("YUYV"), 0x5659_5559);
-    }
-
-    #[test]
-    fn slugs() {
-        assert_eq!(
-            slug("White Balance Temperature, Auto"),
-            "white_balance_temperature_auto"
-        );
-        assert_eq!(slug("  Exposure (Absolute) "), "exposure_absolute");
     }
 
     #[test]

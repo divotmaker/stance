@@ -113,8 +113,10 @@ fn per_trigger_and_live_rolls() {
     );
     let c = finished(feed(&mut rec, 100..110)).remove(0);
     assert_eq!(seqs(&c), (94, 101));
-    rec.set_pre_roll(Duration::from_millis(30));
-    rec.set_post_roll(Duration::from_millis(30));
+    let mut live = rec.config().clone();
+    live.pre_roll = Duration::from_millis(30);
+    live.post_roll = Duration::from_millis(30);
+    rec.set_config(live);
     rec.trigger(Trigger::new(1090 * MS, "a", "s2"));
     let c = finished(feed(&mut rec, 110..120)).remove(0);
     assert_eq!(seqs(&c), (106, 112));

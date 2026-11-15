@@ -1,4 +1,4 @@
-//! USB (UVC) cameras: enumeration, capture modes and controls, and opening a
+//! USB (UVC) cameras: enumeration, capture modes, and opening a
 //! camera as a frame [`Source`].
 //!
 //! Backends: Media Foundation on Windows, V4L2 on 64-bit Linux. On every other
@@ -55,11 +55,7 @@ pub struct CameraInfo {
     pub usb: Option<UsbId>,
     /// Every capture mode the camera offers (all pixel formats).
     pub formats: Vec<Format>,
-    /// The camera's controls with their ranges and current state.
-    pub controls: Vec<ControlInfo>,
-    /// Unit of the exposure control's raw values, for cameras.
-    pub exposure_unit: Option<ExposureUnit>,
-    /// Why `formats` and `controls` could not be read (camera in use by
+    /// Why `formats` could not be read (camera in use by
     /// another application, access blocked), if they couldn't.
     pub probe_error: Option<String>,
 }
@@ -68,12 +64,6 @@ impl CameraInfo {
     /// The camera's MJPEG modes.
     pub fn mjpeg_formats(&self) -> impl Iterator<Item = &Format> {
         self.formats.iter().filter(|f| f.is_mjpeg())
-    }
-
-    /// The control with this id, if the camera has it.
-    #[must_use]
-    pub fn control(&self, id: ControlId) -> Option<&ControlInfo> {
-        self.controls.iter().find(|c| c.id == id)
     }
 }
 
@@ -106,139 +96,6 @@ impl UsbId {
             vid: hex4("vid_")?,
             pid: hex4("pid_")?,
         })
-    }
-}
-
-/// Which control a [`ControlInfo`] describes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum ControlId {
-    /// Exposure time (see [`ExposureUnit`]).
-    Exposure,
-    /// Sensor gain.
-    Gain,
-    /// White balance temperature.
-    WhiteBalance,
-    /// Focus.
-    Focus,
-    /// Brightness.
-    Brightness,
-    /// Contrast.
-    Contrast,
-    /// Saturation.
-    Saturation,
-    /// Sharpness.
-    Sharpness,
-    /// Gamma.
-    Gamma,
-    /// Hue.
-    Hue,
-    /// Backlight compensation.
-    BacklightCompensation,
-    /// Power line frequency (anti-flicker).
-    PowerLineFrequency,
-    /// Color on/off.
-    ColorEnable,
-    /// Zoom.
-    Zoom,
-    /// Pan.
-    Pan,
-    /// Tilt.
-    Tilt,
-    /// Roll.
-    Roll,
-    /// Iris.
-    Iris,
-    /// A backend-specific control without a common name (V4L2 control id).
-    Other(u32),
-}
-
-impl ControlId {
-    /// Canonical name for the common controls: `exposure`, `white_balance`, ….
-    #[must_use]
-    pub fn common_name(self) -> Option<&'static str> {
-        Some(match self {
-            Self::Exposure => "exposure",
-            Self::Gain => "gain",
-            Self::WhiteBalance => "white_balance",
-            Self::Focus => "focus",
-            Self::Brightness => "brightness",
-            Self::Contrast => "contrast",
-            Self::Saturation => "saturation",
-            Self::Sharpness => "sharpness",
-            Self::Gamma => "gamma",
-            Self::Hue => "hue",
-            Self::BacklightCompensation => "backlight_compensation",
-            Self::PowerLineFrequency => "power_line_frequency",
-            Self::ColorEnable => "color_enable",
-            Self::Zoom => "zoom",
-            Self::Pan => "pan",
-            Self::Tilt => "tilt",
-            Self::Roll => "roll",
-            Self::Iris => "iris",
-            Self::Other(_) => return None,
-        })
-    }
-}
-
-/// A control's range and state, read from the camera.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct ControlInfo {
-    /// Which control.
-    pub id: ControlId,
-    /// Canonical name, or a slug of the driver's name for backend-specific controls.
-    pub name: String,
-    /// Smallest raw value.
-    pub min: i64,
-    /// Largest raw value.
-    pub max: i64,
-    /// Raw value step.
-    pub step: i64,
-    /// Default raw value.
-    pub default: i64,
-    /// Current raw value, if the camera reports one.
-    pub current: Option<i64>,
-    /// The control has an automatic mode.
-    pub auto_supported: bool,
-    /// The control is currently automatic.
-    pub auto: Option<bool>,
-    /// Menu entries (value, label) for menu controls.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub menu: Vec<(i64, String)>,
-}
-
-/// The unit of a camera's raw exposure values.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum ExposureUnit {
-    /// Raw value `v` means `2^v` seconds (UVC through `DirectShow` controls on
-    /// Windows), so −7 is 1/128 s.
-    Log2Seconds,
-    /// Raw value `v` means v × 100 µs (V4L2 `EXPOSURE_ABSOLUTE`), so 78 is 7.8 ms.
-    HundredMicros,
-}
-
-impl ExposureUnit {
-    /// Seconds for a raw exposure value.
-    ///
-    /// ```
-    /// use stance::camera::ExposureUnit;
-    /// assert_eq!(ExposureUnit::Log2Seconds.to_seconds(-7), 1.0 / 128.0);
-    /// assert!((ExposureUnit::HundredMicros.to_seconds(78) - 0.0078).abs() < 1e-12);
-    /// ```
-    #[must_use]
-    pub fn to_seconds(self, raw: i64) -> f64 {
-        match self {
-            // Clamped to a tiny range, so the cast is exact.
-            #[allow(clippy::cast_possible_truncation)]
-            Self::Log2Seconds => 2f64.powi(raw.clamp(-64, 64) as i32),
-            // Exposure values are far below 2^52.
-            #[allow(clippy::cast_precision_loss)]
-            Self::HundredMicros => raw as f64 * 100e-6,
-        }
     }
 }
 
@@ -370,12 +227,12 @@ pub(crate) fn choose_format(
     })
 }
 
-/// Lists the connected cameras with their capture modes and controls.
+/// Lists the connected cameras with their capture modes.
 ///
-/// Each camera is opened briefly to read its modes and controls, then closed:
+/// Each camera is opened briefly to read its modes, then closed:
 /// no device stays open. A camera that can't be opened (in use by another
 /// application, access blocked) is still listed, with empty `formats` and
-/// `controls` and `probe_error` set.
+/// `probe_error` set.
 ///
 /// A camera that is open in this process (a streaming [`Camera`], e.g.
 /// inside a [`Capture`](crate::Capture)) is never opened again to probe it:
@@ -667,16 +524,6 @@ mod tests {
     }
 
     #[test]
-    fn control_names() {
-        assert_eq!(ControlId::WhiteBalance.common_name(), Some("white_balance"));
-        assert_eq!(ControlId::Other(7).common_name(), None);
-        assert_eq!(
-            serde_json::to_string(&ControlId::WhiteBalance).unwrap(),
-            r#""white_balance""#
-        );
-    }
-
-    #[test]
     fn list_and_open_never_panic() {
         // CI and build machines have no cameras: either an empty list or Unsupported.
         match list() {
@@ -700,8 +547,6 @@ mod tests {
             name: "cam".into(),
             usb: None,
             formats: vec![Format::mjpeg(640, 480, 30)],
-            controls: Vec::new(),
-            exposure_unit: None,
             probe_error: None,
         };
         let id = "registry-test-camera";

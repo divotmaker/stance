@@ -5,9 +5,6 @@
 //! - Frames: an `IMFSourceReader` on the device's media source, set to one of
 //!   the device's *native* media types with converters disabled, so MJPEG
 //!   arrives as the camera's own compressed bytes. Reads are synchronous.
-//! - Controls: `IAMCameraControl` (exposure, focus, zoom, …) and
-//!   `IAMVideoProcAmp` (gain, white balance, brightness, …) queried from the
-//!   media source. Exposure is in log2 seconds.
 //! - Stopping: a read waits for the camera whatever the timeout. The
 //!   [`Interrupter`] shuts the media source down from the stopping thread,
 //!   which ends a pending read with an error and releases the camera.
@@ -18,7 +15,6 @@ use std::ptr;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use windows::Win32::Media::DirectShow::{IAMCameraControl, IAMVideoProcAmp};
 use windows::Win32::Media::MediaFoundation::{
     IMFActivate, IMFAttributes, IMFMediaSource, IMFMediaType, IMFSample, IMFSourceReader,
     MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
@@ -34,9 +30,9 @@ use windows::Win32::Media::MediaFoundation::{
 use windows::Win32::System::Com::{
     COINIT_MULTITHREADED, CoInitializeEx, CoTaskMemFree, CoUninitialize,
 };
-use windows::core::{GUID, Interface, PWSTR};
+use windows::core::{GUID, PWSTR};
 
-use super::{CameraInfo, ControlId, ControlInfo, Device, ExposureUnit, RawFrame, UsbId};
+use super::{CameraInfo, Device, RawFrame, UsbId};
 use crate::source::Interrupter;
 use crate::{Error, Format, Result, clock};
 
@@ -48,36 +44,6 @@ pub(super) const SUPPORTED: bool = true;
 const VIDEO_STREAM: u32 = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
 #[allow(clippy::cast_sign_loss)]
 const ALL_STREAMS: u32 = MF_SOURCE_READER_ALL_STREAMS.0 as u32;
-
-/// `CameraControl_Flags_Auto` / `VideoProcAmp_Flags_Auto`.
-const FLAG_AUTO: i32 = 1;
-
-/// `IAMCameraControl` properties (`CameraControlProperty`).
-const CAMERA_PROPS: [(i32, ControlId); 7] = [
-    (0, ControlId::Pan),
-    (1, ControlId::Tilt),
-    (2, ControlId::Roll),
-    (3, ControlId::Zoom),
-    (4, ControlId::Exposure),
-    (5, ControlId::Iris),
-    (6, ControlId::Focus),
-];
-
-/// `IAMVideoProcAmp` properties (`VideoProcAmpProperty`, plus the KS power-line
-/// frequency property 13, which UVC drivers expose through the same interface).
-const PROCAMP_PROPS: [(i32, ControlId); 11] = [
-    (0, ControlId::Brightness),
-    (1, ControlId::Contrast),
-    (2, ControlId::Hue),
-    (3, ControlId::Saturation),
-    (4, ControlId::Sharpness),
-    (5, ControlId::Gamma),
-    (6, ControlId::ColorEnable),
-    (7, ControlId::WhiteBalance),
-    (8, ControlId::BacklightCompensation),
-    (9, ControlId::Gain),
-    (13, ControlId::PowerLineFrequency),
-];
 
 fn mf_error(context: &str) -> impl FnOnce(windows::core::Error) -> Error + '_ {
     move |e| Error::device(context, e)
@@ -183,8 +149,6 @@ fn info(id: String, name: String, usb: Option<UsbId>) -> CameraInfo {
         name,
         usb,
         formats: Vec::new(),
-        controls: Vec::new(),
-        exposure_unit: Some(ExposureUnit::Log2Seconds),
         probe_error: None,
     }
 }
@@ -201,10 +165,7 @@ pub(super) fn list() -> Result<Vec<CameraInfo>> {
         }
         let mut cam = info(id, name, usb);
         match activate(a, &cam.name) {
-            Ok(dev) => {
-                cam.formats = dev.formats();
-                cam.controls = dev.controls();
-            }
+            Ok(dev) => cam.formats = dev.formats(),
             Err(e) => cam.probe_error = Some(e.to_string()),
         }
         out.push(cam);
@@ -223,7 +184,6 @@ pub(super) fn open(id: &str) -> Result<(Box<dyn Device>, CameraInfo)> {
         let mut dev = activate(a, &name)?;
         let mut cam = info(cid, name, usb);
         cam.formats = dev.formats();
-        cam.controls = dev.controls();
         dev.rt = Some(rt);
         return Ok((Box::new(dev), cam));
     }
@@ -257,18 +217,11 @@ fn activate(a: &IMFActivate, name: &str) -> Result<MfDevice> {
         };
         (source, reader)
     };
-    // Absence of either interface is not an error: the camera just has fewer controls.
-    let (camera_control, procamp) = (
-        source.cast::<IAMCameraControl>().ok(),
-        source.cast::<IAMVideoProcAmp>().ok(),
-    );
     let mut dev = MfDevice {
         types: Vec::new(),
         reader,
         interrupt_slot: Arc::new(Mutex::new(Some(SharedSource(source.clone())))),
         source,
-        camera_control,
-        procamp,
         rt: None,
     };
     dev.types = native_types(&dev.reader)?;
@@ -354,8 +307,6 @@ struct MfDevice {
     /// thread, before the source is released and MF/COM shut down there.
     interrupt_slot: Arc<Mutex<Option<SharedSource>>>,
     source: IMFMediaSource,
-    camera_control: Option<IAMCameraControl>,
-    procamp: Option<IAMVideoProcAmp>,
     // Declared last so COM/MF shut down after the interfaces above are released.
     rt: Option<Runtime>,
 }
@@ -377,39 +328,6 @@ impl Drop for MfDevice {
     }
 }
 
-/// A control interface: `IAMCameraControl` and `IAMVideoProcAmp` share a shape.
-enum Iface<'a> {
-    Camera(&'a IAMCameraControl),
-    ProcAmp(&'a IAMVideoProcAmp),
-}
-
-impl Iface<'_> {
-    fn range(&self, prop: i32) -> Option<[i32; 5]> {
-        let mut r = [0i32; 5];
-        let [min, max, step, default, caps] = &mut r;
-        // SAFETY: GetRange writes five i32 outputs.
-        let ok = unsafe {
-            match self {
-                Self::Camera(i) => i.GetRange(prop, min, max, step, default, caps),
-                Self::ProcAmp(i) => i.GetRange(prop, min, max, step, default, caps),
-            }
-        };
-        ok.ok().map(|()| r)
-    }
-
-    fn get(&self, prop: i32) -> Option<(i32, i32)> {
-        let (mut v, mut flags) = (0i32, 0i32);
-        // SAFETY: Get writes two i32 outputs.
-        let ok = unsafe {
-            match self {
-                Self::Camera(i) => i.Get(prop, &raw mut v, &raw mut flags),
-                Self::ProcAmp(i) => i.Get(prop, &raw mut v, &raw mut flags),
-            }
-        };
-        ok.ok().map(|()| (v, flags))
-    }
-}
-
 impl MfDevice {
     /// Every native mode, without duplicates.
     fn formats(&self) -> Vec<Format> {
@@ -420,45 +338,6 @@ impl MfDevice {
             }
         }
         formats
-    }
-
-    fn controls(&self) -> Vec<ControlInfo> {
-        CAMERA_PROPS
-            .iter()
-            .chain(PROCAMP_PROPS.iter())
-            .filter_map(|&(_, id)| self.read(id))
-            .collect()
-    }
-
-    fn locate(&self, id: ControlId) -> Option<(Iface<'_>, i32)> {
-        if let Some(&(p, _)) = CAMERA_PROPS.iter().find(|(_, c)| *c == id) {
-            return self.camera_control.as_ref().map(|i| (Iface::Camera(i), p));
-        }
-        if let Some(&(p, _)) = PROCAMP_PROPS.iter().find(|(_, c)| *c == id) {
-            return self.procamp.as_ref().map(|i| (Iface::ProcAmp(i), p));
-        }
-        None
-    }
-
-    fn read(&self, id: ControlId) -> Option<ControlInfo> {
-        let (iface, prop) = self.locate(id)?;
-        let [min, max, step, default, caps] = iface.range(prop)?;
-        let current = iface.get(prop);
-        let auto_supported = caps & FLAG_AUTO != 0;
-        Some(ControlInfo {
-            id,
-            name: id.common_name().unwrap_or("unknown").to_owned(),
-            min: min.into(),
-            max: max.into(),
-            step: step.into(),
-            default: default.into(),
-            current: current.map(|(v, _)| v.into()),
-            auto_supported,
-            auto: current
-                .filter(|_| auto_supported)
-                .map(|(_, f)| f & FLAG_AUTO != 0),
-            menu: Vec::new(),
-        })
     }
 }
 

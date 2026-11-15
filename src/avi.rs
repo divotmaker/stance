@@ -749,8 +749,6 @@ impl AviFile {
             name,
             usb: None,
             formats: vec![format.clone()],
-            controls: Vec::new(),
-            exposure_unit: None,
             probe_error: None,
         };
         Ok(Self {
