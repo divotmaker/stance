@@ -28,7 +28,6 @@ use std::time::Duration;
 use super::{CameraInfo, ControlId, ControlInfo, Device, ExposureUnit, RawFrame, UsbId};
 use crate::{Error, Format, Result, clock};
 
-pub(super) const NAME: &str = "V4L2";
 pub(super) const SUPPORTED: bool = true;
 
 const BUF_TYPE_VIDEO_CAPTURE: u32 = 1;

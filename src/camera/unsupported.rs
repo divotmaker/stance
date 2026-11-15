@@ -3,7 +3,6 @@
 use super::{CameraInfo, Device};
 use crate::{Error, Result};
 
-pub(super) const NAME: &str = "unsupported";
 pub(super) const SUPPORTED: bool = false;
 
 pub(super) fn list() -> Result<Vec<CameraInfo>> {

@@ -40,7 +40,6 @@ use super::{CameraInfo, ControlId, ControlInfo, Device, ExposureUnit, RawFrame, 
 use crate::source::Interrupter;
 use crate::{Error, Format, Result, clock};
 
-pub(super) const NAME: &str = "Media Foundation";
 pub(super) const SUPPORTED: bool = true;
 
 // MF_SOURCE_READER_FIRST_VIDEO_STREAM is the constant 0xFFFFFFFC; the API

@@ -79,9 +79,7 @@ either side of zero and are always used as they are.
 The shape offsets are an inference, not a measurement: the one controlled
 study found a pelvis about 2° more open for fades at impact (not
 significant), and others give directions only. They are small (3°, 0.75 in)
-and exposed as tunable constants (`FADE_OFFSET_HIP_TURN_DEG`,
-`FADE_OFFSET_SHOULDER_TURN_DEG`, `FADE_OFFSET_SHOULDER_TILT_DEG`,
-`FADE_OFFSET_HIP_SWAY_IN`) as well as in the data file.
+and live in the data file, on the shape-linked rows (`shape_offset`).
 
 ## Signs
 

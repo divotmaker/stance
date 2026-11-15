@@ -253,13 +253,6 @@ impl MetricId {
     pub fn applies_to(self, view: View) -> bool {
         self.view().is_none_or(|v| v == view)
     }
-
-    /// The metric whose bands ([`norms`](super::norms)) grade this one:
-    /// every metric grades against its own rows.
-    #[must_use]
-    pub const fn band_key(self) -> Self {
-        self
-    }
 }
 
 /// A metric's value at each key position (absent where it doesn't apply or

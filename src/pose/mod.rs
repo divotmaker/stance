@@ -29,8 +29,8 @@
 //! Models are not bundled. [`ModelSpec`] lists each model's source, SHA-256
 //! and input size; loading reads `<dir>/<name>.onnx` and verifies the hash.
 //! With the `pose-download` feature, [`fetch_model`] downloads a model over
-//! HTTPS into a cache directory first; [`fetch_model_with`] also reports
-//! its progress and can be canceled.
+//! HTTPS into a cache directory first, reporting its progress, and can be
+//! canceled.
 //!
 //! | Model | Use | License |
 //! |---|---|---|
@@ -83,7 +83,7 @@ mod yolox;
 
 pub use clip::{WorkerHook, analyze_clip, analyze_frames};
 #[cfg(feature = "pose-download")]
-pub use download::{FetchProgress, fetch_model, fetch_model_with};
+pub use download::{FetchProgress, fetch_model};
 pub(crate) use filter::Butterworth;
 pub use filter::{OneEuro, OneEuroParams};
 pub use geometry::{BBox, Detection};
@@ -411,19 +411,6 @@ impl PoseModels {
         let mut detector = Yolox::load(&config.detector, dir)?;
         detector.set_thresholds(config.detection_threshold, Yolox::DEFAULT_NMS_THRESHOLD);
         Ok(Self { pose, detector })
-    }
-
-    /// Downloads the config's two models into `cache_dir` if they aren't
-    /// there yet (see [`fetch_model`]), then loads them.
-    ///
-    /// # Errors
-    ///
-    /// As [`fetch_model`] and [`PoseModels::load`].
-    #[cfg(feature = "pose-download")]
-    pub fn download(cache_dir: &Path, config: &PoseConfig) -> Result<Self> {
-        fetch_model(&config.pose_model, cache_dir)?;
-        fetch_model(&config.detector, cache_dir)?;
-        Self::load(cache_dir, config)
     }
 }
 

@@ -30,9 +30,6 @@ mod unsupported;
 #[cfg(not(any(windows, all(target_os = "linux", target_pointer_width = "64"))))]
 use unsupported as backend;
 
-/// Name of this platform's camera API: `Media Foundation`, `V4L2` or `unsupported`.
-pub const BACKEND: &str = backend::NAME;
-
 /// Whether this platform has a camera backend: [`list`] and [`open`] work
 /// on Windows and 64-bit Linux, and return [`Error::Unsupported`] everywhere
 /// else. Sources that are not cameras ([`TestPattern`](crate::TestPattern),

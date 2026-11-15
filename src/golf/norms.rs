@@ -54,19 +54,6 @@ use crate::{Error, Result};
 /// The band-table format version [`Norms::from_json`] reads.
 pub const NORMS_VERSION: u32 = 1;
 
-/// The fade-side center offset of the hip turn at impact (degrees; the draw
-/// side is the negation). The four offsets are inferences, not
-/// measurements: the built-in table carries them on its shape-linked rows.
-pub const FADE_OFFSET_HIP_TURN_DEG: f64 = 3.0;
-/// The fade-side center offset of the shoulder turn at impact (degrees).
-pub const FADE_OFFSET_SHOULDER_TURN_DEG: f64 = 3.0;
-/// The fade-side center offset of the shoulder tilt at impact (degrees):
-/// 3, not 4, so with its SD of 4.5 the fade and draw bands overlap by
-/// ±1.5° around the center rather than ±0.5°.
-pub const FADE_OFFSET_SHOULDER_TILT_DEG: f64 = -3.0;
-/// The fade-side center offset of the hip sway at impact (inches).
-pub const FADE_OFFSET_HIP_SWAY_IN: f64 = -0.75;
-
 /// The height (cm) inch bands assume for a man when the golfer's height is
 /// unknown: the US adult mean.
 pub const ASSUMED_HEIGHT_MALE_CM: f64 = 177.0;
@@ -216,15 +203,6 @@ impl Measure {
             },
             Self::Tempo(TempoMeasure::Ratio) => NormUnit::Ratio,
             Self::Tempo(TempoMeasure::Downswing) => NormUnit::Seconds,
-        }
-    }
-
-    /// The quantity whose bands grade this one ([`MetricId::band_key`]).
-    #[must_use]
-    pub fn band_key(self) -> Self {
-        match self {
-            Self::Metric(id) => Self::Metric(id.band_key()),
-            Self::Tempo(_) => self,
         }
     }
 
@@ -627,7 +605,7 @@ pub struct Lookup<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct Query {
-    /// What is measured (looked up by [`Measure::band_key`]).
+    /// What is measured.
     pub metric: Measure,
     /// Where in the swing.
     pub position: Position,
@@ -1027,11 +1005,9 @@ impl Norms {
     /// 3. no band for the club class: the band for any club
     ///    (`club: null`), else for a wedge the mid-iron band
     ///    (`club_fallback`), each with rule 2.
-    ///
-    /// The metric is looked up by [`Measure::band_key`].
     #[must_use]
     pub fn band(&self, q: &Query) -> Option<Lookup<'_>> {
-        let metric = q.metric.band_key();
+        let metric = q.metric;
         let mut clubs = vec![(Some(q.club), false), (None, false)];
         if q.club == ClubClass::Wedge {
             clubs.push((Some(ClubClass::MidIron), true));

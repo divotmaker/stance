@@ -12,9 +12,8 @@
 )]
 
 use super::{
-    Band, Confidence, Direction, FADE_OFFSET_HIP_SWAY_IN, FADE_OFFSET_HIP_TURN_DEG,
-    FADE_OFFSET_SHOULDER_TILT_DEG, FADE_OFFSET_SHOULDER_TURN_DEG, Measure, Miss, NormUnit, Query,
-    Range, Scale, SdSource, TempoMeasure,
+    Band, Confidence, Direction, Measure, Miss, NormUnit, Query, Range, Scale, SdSource,
+    TempoMeasure,
 };
 use crate::golf::testfigure::*;
 use crate::golf::*;
@@ -57,11 +56,13 @@ fn the_builtin_table_loads_and_names_only_known_ids() {
     assert!(!norms.revision.is_empty());
     assert!(norms.bands().len() > 100, "{}", norms.bands().len());
     let mut seen = std::collections::HashSet::new();
+    // The fade-side center offsets of the shape-linked rows (the draw side
+    // is the negation): degrees, and inches for the sway.
     let offsets = [
-        (MetricId::HipTurn, FADE_OFFSET_HIP_TURN_DEG),
-        (MetricId::ShoulderTurn, FADE_OFFSET_SHOULDER_TURN_DEG),
-        (MetricId::ShoulderTilt, FADE_OFFSET_SHOULDER_TILT_DEG),
-        (MetricId::HipSway, FADE_OFFSET_HIP_SWAY_IN),
+        (MetricId::HipTurn, 3.0),
+        (MetricId::ShoulderTurn, 3.0),
+        (MetricId::ShoulderTilt, -3.0),
+        (MetricId::HipSway, -0.75),
     ];
     for b in norms.bands() {
         if let Measure::Metric(id) = b.metric {
@@ -341,7 +342,9 @@ fn touching_bands_keep_an_overlap_with_offset_3() {
         4.5,
         NormUnit::Degrees,
     );
-    b.shape_offset = Some(FADE_OFFSET_SHOULDER_TILT_DEG);
+    // 3, not 4: with an SD of 4.5 the fade and draw bands overlap by ±1.5°
+    // around the center rather than ±0.5°.
+    b.shape_offset = Some(-3.0);
     b.low = Some(Miss::new(Direction::Less, "level"));
     b.high = Some(Miss::new(Direction::More, "hanging back"));
     let norms = table(b);

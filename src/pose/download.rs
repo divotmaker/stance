@@ -24,6 +24,17 @@ const GLOBAL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 /// Redirects followed (the release hosts redirect to their storage).
 const MAX_REDIRECTS: u32 = 5;
 
+/// How far a download has got: bytes of the response read so far, and the
+/// response's length when the server sent one. For a zip source these are
+/// the archive's bytes, not the extracted model's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FetchProgress {
+    /// Bytes read so far.
+    pub done: u64,
+    /// The response's `Content-Length`, when known.
+    pub total: Option<u64>,
+}
+
 /// Makes sure `<cache_dir>/<name>.onnx` holds the verified model and returns
 /// its path.
 ///
@@ -41,42 +52,23 @@ const MAX_REDIRECTS: u32 = 5;
 /// for any one read (a stalled connection fails rather than hangs), 15
 /// minutes for the whole request, and 512 MiB of response.
 ///
+/// `progress`, when given, is called once when the response starts (`done`
+/// 0) and after every piece of the body read, on the calling thread.
+/// `cancel`, when given, is checked before the request and after every piece
+/// read; once it is set the fetch stops, removes its temporary files and
+/// returns [`Error::Canceled`]. A cancel is noticed between reads, so it can
+/// wait for one read (at most the 60 s read timeout on a stalled
+/// connection). A file already verified in `cache_dir` is returned without
+/// calling either.
+///
 /// # Errors
 ///
 /// [`Error::Download`] if the URL isn't `https://`, a request fails or
 /// times out, a redirect leaves HTTPS, the response is too large, or the
 /// archive lacks the member; [`Error::Model`] if the bytes don't match the
-/// hash; [`Error::Io`] if a file can't be written.
-pub fn fetch_model(spec: &ModelSpec, cache_dir: &Path) -> Result<PathBuf> {
-    fetch_model_with(spec, cache_dir, None, None)
-}
-
-/// How far a download has got: bytes of the response read so far, and the
-/// response's length when the server sent one. For a zip source these are
-/// the archive's bytes, not the extracted model's.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FetchProgress {
-    /// Bytes read so far.
-    pub done: u64,
-    /// The response's `Content-Length`, when known.
-    pub total: Option<u64>,
-}
-
-/// [`fetch_model`] with an optional progress callback and an optional
-/// cancel flag.
-///
-/// `progress` is called once when the response starts (`done` 0) and after
-/// every piece of the body read, on the calling thread. `cancel` is checked
-/// before the request and after every piece read; once it is set the fetch
-/// stops, removes its temporary files and returns [`Error::Canceled`]. A
-/// cancel is noticed between reads, so it can wait for one read (at most the
-/// 60 s read timeout on a stalled connection). A file already verified in
-/// `cache_dir` is returned without calling either.
-///
-/// # Errors
-///
-/// As [`fetch_model`], and [`Error::Canceled`] once `cancel` is set.
-pub fn fetch_model_with(
+/// hash; [`Error::Io`] if a file can't be written; [`Error::Canceled`]
+/// once `cancel` is set.
+pub fn fetch_model(
     spec: &ModelSpec,
     cache_dir: &Path,
     mut progress: Option<&mut dyn FnMut(FetchProgress)>,
@@ -364,7 +356,7 @@ mod tests {
         };
         std::fs::write(spec.path_in(dir.path()), &bytes).unwrap();
         assert_eq!(
-            fetch_model(&spec, dir.path()).unwrap(),
+            fetch_model(&spec, dir.path(), None, None).unwrap(),
             spec.path_in(dir.path())
         );
     }
@@ -409,8 +401,7 @@ mod tests {
         let cancel = AtomicBool::new(true);
         let mut calls = 0;
         let mut progress = |_: FetchProgress| calls += 1;
-        let e =
-            fetch_model_with(&spec, dir.path(), Some(&mut progress), Some(&cancel)).unwrap_err();
+        let e = fetch_model(&spec, dir.path(), Some(&mut progress), Some(&cancel)).unwrap_err();
         assert!(matches!(e, Error::Canceled), "{e}");
         assert_eq!(calls, 0);
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
@@ -424,7 +415,7 @@ mod tests {
         std::fs::write(cached.path_in(dir.path()), &bytes).unwrap();
         let mut progress = |_: FetchProgress| calls += 1;
         assert_eq!(
-            fetch_model_with(&cached, dir.path(), Some(&mut progress), Some(&cancel)).unwrap(),
+            fetch_model(&cached, dir.path(), Some(&mut progress), Some(&cancel)).unwrap(),
             cached.path_in(dir.path())
         );
         assert_eq!(calls, 0);
@@ -438,7 +429,7 @@ mod tests {
             url: "http://invalid.example/model.onnx",
             ..super::super::YOLOX_NANO
         };
-        let e = fetch_model(&spec, dir.path()).unwrap_err();
+        let e = fetch_model(&spec, dir.path(), None, None).unwrap_err();
         assert!(matches!(e, Error::Download { .. }), "{e}");
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
     }
