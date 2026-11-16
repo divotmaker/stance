@@ -41,6 +41,11 @@ use unsupported as backend;
 /// ```
 pub const SUPPORTED: bool = backend::SUPPORTED;
 
+/// The fastest frame rate [`FormatRequest::Auto`] picks, in frames per
+/// second. Rates up to half a frame above it count (119.88 and 120.0 both
+/// do). A camera with no MJPEG mode at or below it gets its slowest mode.
+pub const AUTO_MAX_FPS: f64 = 120.0;
+
 /// A camera found by [`list`], or the description of any other [`Source`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CameraInfo {
@@ -115,7 +120,9 @@ impl UsbId {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum FormatRequest {
-    /// The highest MJPEG frame rate, then the largest size at that rate.
+    /// The highest MJPEG frame rate up to [`AUTO_MAX_FPS`], then the largest
+    /// size at that rate. A camera whose modes are all faster gets its
+    /// slowest mode, at its largest size.
     #[default]
     Auto,
     /// An exact MJPEG size, at the frame rate closest to `fps` (within 0.5).
@@ -204,10 +211,22 @@ pub(crate) fn choose_format(
         });
     }
     let best = match *request {
-        FormatRequest::Auto => mjpeg
-            .iter()
-            .copied()
-            .max_by(|a, b| a.fps().total_cmp(&b.fps()).then(a.area().cmp(&b.area()))),
+        FormatRequest::Auto => {
+            let fastest_then_largest = |a: &&Format, b: &&Format| {
+                a.fps().total_cmp(&b.fps()).then(a.area().cmp(&b.area()))
+            };
+            mjpeg
+                .iter()
+                .copied()
+                .filter(|f| f.fps() < AUTO_MAX_FPS + 0.5)
+                .max_by(fastest_then_largest)
+                .or_else(|| {
+                    mjpeg
+                        .iter()
+                        .copied()
+                        .min_by(|a, b| a.fps().total_cmp(&b.fps()).then(b.area().cmp(&a.area())))
+                })
+        }
         FormatRequest::Mode { width, height, fps } => mjpeg
             .iter()
             .copied()
@@ -434,9 +453,55 @@ mod tests {
     }
 
     #[test]
-    fn auto_is_mjpeg_fastest_then_largest() {
+    fn auto_under_the_cap_is_mjpeg_fastest_then_largest() {
         let f = choose_format("c", &formats(), &FormatRequest::Auto).unwrap();
         assert_eq!(f, fmt("MJPG", 1920, 1080, 60));
+    }
+
+    #[test]
+    fn auto_caps_at_120_fps_then_largest() {
+        let cam = vec![
+            fmt("MJPG", 1280, 720, 200),
+            fmt("MJPG", 1280, 720, 150),
+            fmt("MJPG", 640, 480, 120),
+            fmt("MJPG", 1280, 720, 120),
+            fmt("MJPG", 1280, 720, 80),
+            fmt("MJPG", 1920, 1080, 60),
+        ];
+        let f = choose_format("c", &cam, &FormatRequest::Auto).unwrap();
+        assert_eq!(f, fmt("MJPG", 1280, 720, 120));
+        let ntsc = Format {
+            fps_num: 120_000,
+            fps_den: 1001,
+            ..fmt("MJPG", 1280, 720, 0)
+        };
+        let cam = [fmt("MJPG", 640, 480, 200), ntsc.clone()];
+        assert_eq!(
+            choose_format("c", &cam, &FormatRequest::Auto).unwrap(),
+            ntsc
+        );
+    }
+
+    #[test]
+    fn auto_takes_the_slowest_when_every_mode_is_faster_than_the_cap() {
+        let cam = vec![
+            fmt("MJPG", 1280, 720, 200),
+            fmt("MJPG", 640, 480, 150),
+            fmt("MJPG", 1280, 720, 150),
+            fmt("MJPG", 320, 240, 240),
+        ];
+        let f = choose_format("c", &cam, &FormatRequest::Auto).unwrap();
+        assert_eq!(f, fmt("MJPG", 1280, 720, 150));
+    }
+
+    #[test]
+    fn explicit_mode_ignores_the_auto_cap() {
+        let cam = vec![fmt("MJPG", 1280, 720, 200), fmt("MJPG", 1280, 720, 120)];
+        let req = "1280x720@200".parse().unwrap();
+        assert_eq!(
+            choose_format("c", &cam, &req).unwrap(),
+            fmt("MJPG", 1280, 720, 200)
+        );
     }
 
     #[test]

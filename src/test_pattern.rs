@@ -171,7 +171,8 @@ impl TestPattern {
 
     /// Settings for a mode request, the rest at their defaults:
     /// [`FormatRequest::Auto`] picks from [`TestPattern::modes`] as it does
-    /// for a camera (the highest frame rate, then the largest size); an
+    /// for a camera (the highest frame rate up to
+    /// [`AUTO_MAX_FPS`](crate::camera::AUTO_MAX_FPS), then the largest size); an
     /// explicit mode is taken as asked, its rate rounded to a whole number
     /// from 1 to 1000. [`TestPattern::new`] checks the size.
     ///
