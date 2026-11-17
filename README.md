@@ -23,7 +23,7 @@ camera ──► Capture thread ──► Ring (bounded) ──► your loop ─
                      shot triggers (FRP, buttons) ──┘
 ```
 
-1. **Sources.** `list` enumerates cameras with their modes and controls;
+1. **Sources.** `list` enumerates cameras with their modes;
    `open` starts one in MJPEG. `TestPattern` (generated frames with a moving
    marker and a frame counter) and `AviFile` (playback of a recorded clip)
    implement the same `Source` trait, so everything downstream can be tested
@@ -148,8 +148,10 @@ keeps the bytes as sent; call it before decoding.
 `camera::SUPPORTED` says whether this platform has a camera backend.
 
 Only MJPEG is captured: a camera without an MJPEG mode returns a clear error.
-`FormatRequest::Auto` picks the highest MJPEG frame rate, then the largest
-size; `"1280x720@120"` asks for an exact mode. For the test pattern,
+`FormatRequest::Auto` picks the highest MJPEG frame rate up to 120 fps
+(`camera::AUTO_MAX_FPS`), then the largest size (a camera whose modes are all
+faster gets its slowest);
+`"1280x720@120"` asks for an exact mode. For the test pattern,
 `TestPattern::config_for` maps a request the same way over
 `TestPattern::modes`, and `TestPattern::camera_info` describes it as a camera
 list entry.
@@ -205,16 +207,14 @@ fn shot_detected() -> bool {
 
 ### Flight Relay Protocol
 
-With the `frp` feature, `frp::trigger_from_message` turns a Flight Relay
-Protocol `shot.trigger` into a `Trigger<ShotKey>` whose source is the
-message's `from`, the launch monitor actor that saw the strike. The
-`frp_record` example joins an FRP bus as a collector and writes a clip per
-shot:
+The `frp_record` example joins a Flight Relay Protocol bus as a collector
+and writes a clip per `shot.trigger`. Each trigger's source is the
+message's `from`, the launch monitor actor that saw the strike:
 
 ```text
-cargo run --example frp_record --features frp -- --list
-cargo run --example frp_record --features frp -- --camera <id> --url ws://localhost:5880/frp --out clips
-cargo run --example frp_record --features frp -- --camera test-pattern --keyboard
+cargo run --example frp_record -- --list
+cargo run --example frp_record -- --camera <id> --url ws://localhost:5880/frp --out clips
+cargo run --example frp_record -- --camera test-pattern --keyboard
 ```
 
 ## Pose estimation (`pose` feature, alpha)
@@ -260,8 +260,8 @@ single executable with no native libraries, on Windows, Linux and macOS.
   the `PoseEngine` and `PersonDetector` traits; RTMPose and YOLOX are the
   defaults (`PoseModels::load`), and another pair plugs in through
   `PoseModels::new`.
-- **Filters:** `OneEuro` for live smoothing and a zero-phase `Butterworth`
-  for whole clips. Tracks store raw keypoints; filtering is derived.
+- **Filters:** `OneEuro` for live smoothing; `golf` smooths whole clips with
+  a zero-phase Butterworth. Tracks store raw keypoints; filtering is derived.
 
 The image pipeline is a port of [rtmlib](https://github.com/Tau-J/rtmlib)'s
 RTMPose path (Apache-2.0, itself from MMPose and YOLOX; see `NOTICE`): box → crop with 1.25 padding at the model's 3:4
@@ -276,12 +276,12 @@ about one SimCC bin (≤ 1.3 px).
 Models are not bundled. `ModelSpec` lists each one's source, SHA-256, size
 and input size. `RtmPose::load`, `Yolox::load` and `PoseModels::load` read
 `<dir>/<name>.onnx` and refuse a file whose SHA-256 doesn't match. With the
-`pose-download` feature, `fetch_model` (or `PoseModels::download`) downloads
+`pose-download` feature, `fetch_model` downloads
 a model over HTTPS only (rustls, redirects included) into a cache directory,
 extracts it from its zip archive when the source is one, verifies it and
 renames it into place; concurrent fetches never see a partial file. A
 download has bounds: 30 s to connect, 60 s for any one read, 15 minutes in
-all. `fetch_model_with` takes an optional progress callback (bytes read,
+all. It takes an optional progress callback (bytes read,
 and the total when the server sends one) and an optional cancel flag, which
 stops the download and removes its partial files.
 
@@ -305,7 +305,7 @@ use std::path::Path;
 use stance::pose::{PoseConfig, PoseModels, decode_jpeg};
 
 let config = PoseConfig::default();
-let models = PoseModels::load(Path::new("models"), &config)?; // or PoseModels::download
+let models = PoseModels::load(Path::new("models"), &config)?;
 
 // Live: one frame at a time.
 let mut tracker = models.tracker(config.clone())?;
@@ -334,9 +334,8 @@ swaps per clip. `pose_render` writes the clip with the skeleton drawn on it
 (the person's left side cyan, right orange; faint where the score is low),
 its `.pose.json`, and stills at the impact frame.
 
-Both draw with `stance::pose::draw`: blended lines and disks, a skeleton
-and a 5×7 pixel font for labels, in pure Rust, for any application that
-wants to annotate frames.
+Both draw with `examples/support/draw.rs`: blended lines and disks, a
+skeleton and a 5×7 pixel font for labels, in pure Rust.
 
 ### Golf metrics (alpha)
 
@@ -467,20 +466,19 @@ image's right; down the line, a right-hander faces the image's right. The
 report also guesses the view from the address pose (unknown when the cues
 disagree; only the either-view metrics are measured then) and checks the
 handedness against the swing. A mirrored camera image (a selfie-style
-preview) makes a right-hander look left-handed: set `SwingOptions::mirrored`
+preview) makes a right-hander look left-handed: set `SwingConfig::mirrored`
 (live: measure `unmirror(&pose, width)`) and give the golfer's true hand.
 The report reader skips metrics it doesn't know, so reports from a later
 crate version still load.
 
 ```rust,ignore
-use stance::golf::{Handed, SwingOptions, View, analyze_swing, posture};
+use stance::golf::{Handed, SwingConfig, View, analyze_swing, posture};
 
-let report = analyze_swing(&track, &SwingOptions {
-    handed: Handed::Right,
-    impact_ns: Some(impact_ns), // launch monitor (refined); None estimates it
-    height_cm: Some(180.0),
-    ..SwingOptions::default()   // view: guessed from the address pose
-})?;
+let mut config = SwingConfig::default(); // view: guessed from the address pose
+config.handed = Handed::Right;
+config.impact_ns = Some(impact_ns); // launch monitor (refined); None estimates it
+config.height_cm = Some(180.0);
+let report = analyze_swing(&track, &config)?;
 report.write_beside(&files.avi)?; // <clip>.swing.json
 
 // Live, beside the camera view: a few angles per frame.
